@@ -138,8 +138,8 @@ keyPassword=******
 
 ## 版本管理约定
 
-- `versionCode` 每个版本**必须递增**（当前 39），否则无法覆盖安装
-- `versionName` 与 Git tag 一致：`v2.1.0`
+- `versionCode` 每个版本**必须递增**（当前 40），否则无法覆盖安装
+- `versionName` 与 Git tag 一致：`v2.1.1`
 - 每次发版：
   1. 改 `app/build.gradle.kts` 的版本号
   2. 更新 `CHANGELOG.md`

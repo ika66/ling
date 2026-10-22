@@ -2383,6 +2383,38 @@
     });
   }
 
+  // 通用确认弹窗（替代 window.confirm：WebView 未接管 onJsConfirm 时会一律返回 false）
+  function confirmModal(opts = {}) {
+    return new Promise(resolve => {
+      const layer = document.createElement('div');
+      layer.className = 'modal-layer';
+      layer.innerHTML = `
+        <div class="modal-card">
+          <div class="modal-icon">${icon(opts.icon || 'trash')}</div>
+          <h3 class="modal-title">${opts.title || '确认操作？'}</h3>
+          <p class="modal-text">${opts.text || ''}</p>
+          <div class="modal-actions">
+            <button class="modal-btn" data-modal-cancel>${opts.cancelLabel || '取消'}</button>
+            <button class="modal-btn ${opts.danger === false ? 'modal-btn-primary' : 'modal-btn-danger'}" data-modal-ok>${opts.okLabel || '确定'}</button>
+          </div>
+        </div>`;
+      document.body.appendChild(layer);
+      requestAnimationFrame(() => layer.classList.add('open'));
+      let settled = false;
+      const finish = val => {
+        if (settled) return;
+        settled = true;
+        layer.classList.remove('open');
+        setTimeout(() => layer.remove(), 200);
+        resolve(val);
+      };
+      layer.addEventListener('click', e => {
+        if (e.target === layer || e.target.closest('[data-modal-cancel]')) finish(false);
+        else if (e.target.closest('[data-modal-ok]')) finish(true);
+      });
+    });
+  }
+
   // 拖动删除确认：屏幕中间 modal
   function openDragDeleteModal(w) {
     if (!w) return;
@@ -2500,8 +2532,6 @@
       <button class="action-item" data-action="change-icon" data-id="${w.id}">${icon('image')}更换作品图标</button>
       <button class="action-item" data-action="ai-similar" data-id="${w.id}">${icon('spark')}相似作品推荐</button>
       ${w.status === 'reading' && w.backgroundImage ? `<button class="action-item" data-action="remove-background" data-id="${w.id}">${icon('image')}移除卡片背景</button>` : ''}
-      <button class="action-item" data-ling="export-backup">${icon('layers')}导出全部记录（备份）</button>
-      <button class="action-item" data-ling="import-backup">${icon('image')}导入备份</button>
       <button class="action-item danger" data-action="delete-work" data-id="${w.id}">${icon('trash')}删除作品</button>
       <button class="action-cancel" data-close="actions">取消</button>`;
     openSheet('actionSheet');
@@ -3470,46 +3500,59 @@
     try { return b.isInstalled(pkg) === true; } catch (e) { return false; }
   }
 
-  // ── 备份导出 / 导入 ─────────────────────────────────────
+  // ── 设置抽屉：数据备份导出 / 导入 ───────────────────────
   document.addEventListener('click', e => {
     const el = e.target.closest('[data-ling]');
     if (!el) return;
     if (el.dataset.ling === 'export-backup') {
-      closeSheet('actionSheet');
       const payload = JSON.stringify({
         app: 'ling-backup', version: 1, exportedAt: new Date().toISOString(),
         db: localStorage.getItem(DB_KEY) || 'null',
         drafts: localStorage.getItem(DRAFT_KEY) || 'null'
       });
+      const count = (db.works || []).length;
       const b = bridge();
       const fname = 'ling-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+      closeDrawer();
       if (b && b.saveFile) {
-        const ok = b.saveFile(fname, payload);
-        toast(ok ? '已保存到 下载/' + fname : '保存失败');
+        let ok = false;
+        try { ok = b.saveFile(fname, payload); } catch (err) { ok = false; }
+        toast(ok ? `已导出 ${count} 部作品到 下载/${fname}` : '保存失败，请检查存储权限');
       } else {
         navigator.clipboard.writeText(payload).then(
-          () => toast('备份已复制到剪贴板'),
-          () => toast('备份失败')
+          () => toast(`已导出 ${count} 部作品，内容已复制到剪贴板`),
+          () => toast('导出失败')
         );
       }
     }
     if (el.dataset.ling === 'import-backup') {
-      closeSheet('actionSheet');
       const inp = $('#backupFile');
       inp.value = '';
       inp.onchange = () => {
         const f = inp.files && inp.files[0];
         if (!f) return;
         const r = new FileReader();
-        r.onload = () => {
-          try {
-            const j = JSON.parse(String(r.result));
-            if (j.app !== 'ling-backup' || typeof j.db !== 'string') { toast('不是有效的备份文件'); return; }
-            if (!confirm('导入会覆盖当前全部记录，确定继续？')) return;
-            localStorage.setItem(DB_KEY, j.db);
-            if (typeof j.drafts === 'string') localStorage.setItem(DRAFT_KEY, j.drafts);
-            location.reload();
-          } catch (err) { toast('备份文件解析失败'); }
+        r.onload = async () => {
+          let j = null;
+          try { j = JSON.parse(String(r.result)); } catch (err) { j = null; }
+          if (!j || j.app !== 'ling-backup' || typeof j.db !== 'string') {
+            toast('不是有效的备份文件');
+            return;
+          }
+          let count = 0;
+          try { const d = JSON.parse(j.db); count = (d.works || []).length; } catch (err) {}
+          closeDrawer();
+          const ok = await confirmModal({
+            icon: 'image',
+            title: '导入这份备份？',
+            text: `备份里共有 ${count} 部作品（${(j.exportedAt || '').slice(0, 10)} 导出）。导入后会覆盖当前全部记录，且无法撤销。`,
+            okLabel: '覆盖并导入'
+          });
+          if (!ok) return;
+          localStorage.setItem(DB_KEY, j.db);
+          if (typeof j.drafts === 'string') localStorage.setItem(DRAFT_KEY, j.drafts);
+          toast('导入完成，正在重新打开…');
+          setTimeout(() => location.reload(), 400);
         };
         r.readAsText(f);
       };

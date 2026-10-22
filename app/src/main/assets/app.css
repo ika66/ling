@@ -2030,6 +2030,19 @@ input,textarea{color:var(--ink)}
 }
 .modal-btn:active{transform:scale(.96)}
 .modal-btn-danger{background:var(--danger);color:#fff}
+.modal-btn-primary{background:var(--accent-deep);color:#fff}
+
+/* v2.1.1 · 设置抽屉：数据备份按钮 */
+.drawer-actions{display:flex;flex-direction:column;gap:8px;margin:0 0 10px}
+.drawer-btn{
+  display:flex;align-items:center;gap:12px;width:100%;padding:12px 14px;
+  border-radius:14px;background:var(--paper-deep);text-align:left;
+  transition:transform .16s cubic-bezier(.2,.8,.2,1),background .16s ease;
+}
+.drawer-btn:active{transform:scale(.98);background:var(--accent-soft)}
+.drawer-btn .icon{width:17px;height:17px;flex:none;color:var(--accent-deep)}
+.drawer-btn > span{display:flex;flex-direction:column;gap:3px;font-size:12.5px;font-weight:600;color:var(--ink);letter-spacing:.02em;min-width:0}
+.drawer-btn small{font-size:10px;font-weight:400;color:var(--muted);letter-spacing:.02em}
 
 /* ══════════════════════════════════════════════════════
    v2.0.2 · 新建菜单：以加号为中心 clip-path 圆形展开（恢复）

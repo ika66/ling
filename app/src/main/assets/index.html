@@ -43,7 +43,7 @@
     <section class="screen active" id="screen-records">
       <div class="screen-topbar">
         <div class="brand-group">
-          <button class="icon-btn" data-action="open-drawer" aria-label="播放设置"><svg class="icon"><use href="#i-menu"/></svg></button>
+          <button class="icon-btn" data-action="open-drawer" aria-label="设置"><svg class="icon"><use href="#i-menu"/></svg></button>
           <button class="brand" data-action="go-records" aria-label="回到记录">铃<span class="brand-dot"></span></button>
         </div>
         <div class="brand-actions">
@@ -65,7 +65,7 @@
     <section class="screen" id="screen-wishlist">
       <div class="screen-topbar">
         <div class="brand-group">
-          <button class="icon-btn" data-action="open-drawer" aria-label="播放设置"><svg class="icon"><use href="#i-menu"/></svg></button>
+          <button class="icon-btn" data-action="open-drawer" aria-label="设置"><svg class="icon"><use href="#i-menu"/></svg></button>
           <button class="brand" data-action="go-records" aria-label="回到记录">铃<span class="brand-dot"></span></button>
         </div>
         <div class="brand-actions">
@@ -85,7 +85,7 @@
     <section class="screen" id="screen-reading">
       <div class="screen-topbar">
         <div class="brand-group">
-          <button class="icon-btn" data-action="open-drawer" aria-label="播放设置"><svg class="icon"><use href="#i-menu"/></svg></button>
+          <button class="icon-btn" data-action="open-drawer" aria-label="设置"><svg class="icon"><use href="#i-menu"/></svg></button>
           <button class="brand" data-action="go-records" aria-label="回到记录">铃<span class="brand-dot"></span></button>
         </div>
         <div class="brand-actions">
@@ -360,12 +360,12 @@
 
   <div class="toast" id="toast"></div>
 
-  <!-- 播放设置侧边栏 -->
+  <!-- 设置侧边栏 -->
   <div class="drawer-layer" id="lingDrawer" aria-hidden="true">
     <div class="drawer-backdrop" data-close="drawer"></div>
     <aside class="drawer">
       <div class="drawer-head">
-        <span class="drawer-title">播放设置</span>
+        <span class="drawer-title">设置</span>
         <button class="sheet-close" data-close="drawer" aria-label="关闭"><svg class="icon"><use href="#i-close"/></svg></button>
       </div>
       <div class="drawer-body">
@@ -394,6 +394,19 @@
         <p class="drawer-label">外观与主题</p>
         <div class="theme-grid" id="themeGrid"></div>
         <p class="drawer-note">切换后全局生效，重启自动恢复。</p>
+
+        <p class="drawer-label">数据备份</p>
+        <div class="drawer-actions">
+          <button class="drawer-btn" data-ling="export-backup">
+            <svg class="icon"><use href="#i-layers"/></svg>
+            <span>导出全部记录<small>存成 JSON 备份文件</small></span>
+          </button>
+          <button class="drawer-btn" data-ling="import-backup">
+            <svg class="icon"><use href="#i-image"/></svg>
+            <span>导入备份<small>覆盖当前全部记录</small></span>
+          </button>
+        </div>
+        <p class="drawer-note">备份包含全部作品、感想与草稿。换机、卸载重装之前，先来这里导出一份。</p>
       </div>
     </aside>
   </div>
