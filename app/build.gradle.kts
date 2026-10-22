@@ -1,6 +1,17 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
 }
+
+// 发布签名：优先读取仓库根目录的 keystore.properties（不入库）；
+// 文件不存在时（比如别人 clone 下来）自动回退到 debug 签名，保证能构建。
+val keystorePropsFile = rootProject.file("keystore.properties")
+val keystoreProps = Properties().apply {
+    // 必须按 UTF-8 读：默认 ISO-8859-1 会把中文路径读成乱码
+    if (keystorePropsFile.exists()) keystorePropsFile.reader(Charsets.UTF_8).use { load(it) }
+}
+val hasReleaseKey = keystorePropsFile.exists() && keystoreProps.getProperty("storePassword") != null
 
 android {
     namespace = "com.yuwei.app"
@@ -10,14 +21,29 @@ android {
         applicationId = "com.yuwei.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 38
-        versionName = "2.0.2"
+        versionCode = 39
+        versionName = "2.1.0"
+    }
+
+    signingConfigs {
+        if (hasReleaseKey) {
+            create("release") {
+                storeFile = file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasReleaseKey) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 

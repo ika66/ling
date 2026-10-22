@@ -121,15 +121,25 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 
 也可以用 Android Studio 直接打开仓库根目录（会读取 `local.properties` 里的 SDK 路径，该文件不入库）。
 
-> 当前 release 构建使用 debug 签名，方便自用覆盖安装。若要正式分发，请按
-> [`docs/发布流程.md`](docs/发布流程.md) 配置自己的 keystore。
+### 签名
+
+发布包使用自有 keystore 签名，配置放在仓库根目录的 `keystore.properties`（**不入库**）：
+
+```properties
+storeFile=C:/path/to/ling-release.jks
+storePassword=******
+keyAlias=ling
+keyPassword=******
+```
+
+`app/build.gradle.kts` 会自动读取：文件存在则用正式密钥签名 release；不存在（例如别人 clone 下来）则回退到 debug 签名，保证 `assembleRelease` 仍能跑通。自己构建时把上面四项换成你的密钥即可。
 
 ---
 
 ## 版本管理约定
 
-- `versionCode` 每个版本**必须递增**（当前 38），否则无法覆盖安装
-- `versionName` 与 Git tag 一致：`v2.0.2`
+- `versionCode` 每个版本**必须递增**（当前 39），否则无法覆盖安装
+- `versionName` 与 Git tag 一致：`v2.1.0`
 - 每次发版：
   1. 改 `app/build.gradle.kts` 的版本号
   2. 更新 `CHANGELOG.md`

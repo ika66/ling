@@ -3,6 +3,20 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 `主版本.次版本.修订号`，`versionCode` 单调递增。
 
+## [2.1.0] - 2026-10-22 · versionCode 39
+
+### 变更
+- **发布包改为自有 keystore 签名**（此前用的是 IDE 默认 debug 签名）。debug key 是公开的，
+  任何人都能签出同包名、同签名、可覆盖安装的 APK，正式分发前必须换掉。
+- `app/build.gradle.kts` 自动读取根目录 `keystore.properties`；文件缺失时回退 debug 签名，
+  保证别人 clone 后仍可直接构建。
+
+### ⚠️ 升级必读
+- 签名变了，**无法覆盖安装**。升级前请在应用内「设置 → 导出备份」保存 JSON，
+  然后卸载旧版、安装本版、再用「导入备份」恢复。之后的所有版本都可以正常覆盖升级。
+- keystore 文件与密码务必备份（本机 `~/.ling-signing/` 已放一份副本）。**密钥丢失 = 永远
+  无法再更新这个应用**，只能换包名重新发布。
+
 ## [2.0.2] - 2026-10-22 · versionCode 38
 
 ### 恢复
