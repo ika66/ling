@@ -878,14 +878,14 @@
   // 保留「封面优先」的构图，但底色统一压到石墨，钴蓝仅作高光与强调。
   function darkenDetailTheme() {
     return {
-      bg: '#0B0E13', bgRgb: '11,14,19',
-      fg: '#E9EDF4', soft: 'rgba(233,237,244,.62)',
-      hair: 'rgba(255,255,255,.12)', chip: 'rgba(255,255,255,.10)',
-      accent: '#8FA3F5', dark: true, ink: '#C6CEDC',
-      card: 'rgba(255,255,255,.055)', cardLine: 'rgba(255,255,255,.09)',
-      glass: 'rgba(20,24,32,.66)', glassLine: 'rgba(255,255,255,.14)', glassHi: 'rgba(255,255,255,.20)',
-      line: 'rgba(255,255,255,.10)', lineStrong: 'rgba(255,255,255,.18)',
-      accentSoft: 'rgba(132,150,242,.16)'
+      bg: '#11151B', bgRgb: '17,21,27',
+      fg: '#E9ECF2', soft: 'rgba(233,236,242,.62)',
+      hair: '#303744', chip: 'rgba(255,255,255,.08)',
+      accent: '#8298E8', dark: true, ink: '#9CA6B5',
+      card: 'rgba(26,32,41,.82)', cardLine: '#303744',
+      glass: 'rgba(17,21,27,.66)', glassLine: 'rgba(233,236,242,.14)', glassHi: 'rgba(233,236,242,.20)',
+      line: 'rgba(233,236,242,.12)', lineStrong: 'rgba(233,236,242,.22)',
+      accentSoft: 'rgba(130,152,232,.14)'
     };
   }
   function applyDetailTheme(theme) {
@@ -4076,7 +4076,7 @@
   // ── 多主题色系统 ─────────────────────────────────────
   const THEME_KEY = 'yuwei.theme.v1';
   const THEMES = [
-    { id: 'cinema',   name: '午夜放映室', sw: ['#0F1217', '#8496F2', '#1C2637'], dark: true },
+    { id: 'cinema',   name: '午夜放映室', sw: ['#11151B', '#8298E8', '#1A2029'], dark: true },
     { id: 'mist',     name: '海雾青', sw: ['#F5F7FA', '#5E78C8', '#397C80'] },
     { id: 'ink',      name: '水墨灰', sw: ['#F4F2ED', '#6E7781', '#555B60'] },
     { id: 'lavender', name: '薰衣紫', sw: ['#F7F3FC', '#8B79C6', '#8373B8'] },
@@ -4112,7 +4112,7 @@
     document.documentElement.setAttribute('data-theme', id);
     const meta = document.querySelector('meta[name="theme-color"]');
     const dark = !!(THEMES.find(x => x.id === id) || {}).dark;
-    if (meta) meta.setAttribute('content', dark ? '#090B0F' : '#FFFFFF');
+    if (meta) meta.setAttribute('content', dark ? '#11151B' : '#FFFFFF');
     // 状态栏图标明暗：深色主题用浅色图标
     try {
       const b = bridge();
