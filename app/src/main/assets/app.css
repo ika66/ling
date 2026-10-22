@@ -110,6 +110,91 @@ img{display:block}
 .head-sub b{font-weight:500;color:var(--ink-soft);font-size:11px}
 .dot-sep{width:2px;height:2px;border-radius:50%;background:currentColor;opacity:.6;flex:none}
 
+/* ── 阶段4 · 发现条 / 抽选面板 ──────────────────────────
+   一条细横条就是入口：左半边是「今日灵感」，右半边是「抽一部」。
+   不用新卡片堆首页，也不用弹层 —— 结果就地展开，随时可收起。
+   颜色全部走语义变量，七个主题自动跟随。 */
+.discover{
+  display:flex;align-items:center;gap:9px;
+  margin-top:16px;padding:10px 10px 10px 13px;border-radius:var(--r-lg,16px);
+  background:var(--card-bg,var(--paper));
+  border:1px solid var(--card-line,var(--hair));
+  box-shadow:var(--sh-1);
+}
+.discover-kicker{
+  display:flex;align-items:center;gap:5px;
+  font-size:9px;font-weight:500;letter-spacing:.14em;color:var(--muted);
+}
+.discover-kicker .icon{width:11px;height:11px;stroke-width:1.6;color:var(--accent-deep)}
+.discover-main{
+  flex:1;min-width:0;display:block;text-align:left;
+  padding:0;background:none;border:0;color:inherit;
+}
+.discover-title{
+  display:block;margin-top:5px;
+  font-family:var(--serif);font-size:13px;font-weight:600;letter-spacing:.01em;color:var(--ink);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.discover-sub{
+  display:block;margin-top:4px;font-size:9.5px;line-height:1.4;color:var(--muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.discover-note{flex:1;min-width:0;font-size:10px;color:var(--muted);letter-spacing:.02em}
+.discover-roll,.discover-btn{
+  flex:none;height:31px;padding:0 13px;border-radius:999px;
+  border:1px solid var(--hair);background:transparent;
+  color:var(--accent-deep);font-size:10.5px;letter-spacing:.05em;
+  transition:background .18s ease,color .18s ease,border-color .18s ease;
+}
+.discover-btn{color:var(--ink-soft)}
+.discover-roll:active,.discover-btn:active{background:var(--accent-soft);border-color:rgba(88,114,198,.25)}
+
+.discover-pick[hidden]{display:none}
+.discover-pick{
+  margin-top:9px;border-radius:var(--r-lg,16px);overflow:hidden;
+  background:var(--card-bg,var(--paper));
+  border:1px solid var(--card-line,var(--hair));
+  box-shadow:var(--sh-2);
+}
+.pick-inner{padding:12px 13px 12px}
+.pick-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.pick-kicker{font-size:9px;letter-spacing:.13em;color:var(--muted);font-weight:500}
+.pick-close{
+  width:24px;height:24px;border-radius:50%;display:grid;place-items:center;
+  background:transparent;border:0;color:var(--muted-light,var(--muted));
+}
+.pick-close .icon{width:13px;height:13px;stroke-width:1.7}
+.pick-body{display:flex;gap:12px;margin-top:10px;align-items:flex-start}
+.cover.pick-cover{width:56px;height:78px;border-radius:7px}
+.pick-info{flex:1;min-width:0}
+.pick-title{
+  margin:0;font-family:var(--serif);font-size:15px;font-weight:600;letter-spacing:.01em;
+  color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.pick-meta{margin:5px 0 0;font-size:10px;color:var(--muted);letter-spacing:.02em}
+.pick-why{margin:7px 0 0;font-size:10.5px;line-height:1.65;color:var(--ink-soft)}
+.pick-actions{display:flex;align-items:center;gap:7px;margin-top:13px}
+.pick-btn{
+  flex:1;height:34px;padding:0 10px;border-radius:10px;
+  border:1px solid var(--hair);background:transparent;
+  color:var(--ink-soft);font-size:10.5px;letter-spacing:.04em;
+  transition:background .18s ease,color .18s ease;
+}
+.pick-btn.is-primary{background:var(--btn-bg);color:var(--btn-fg);border-color:transparent;flex:1.2}
+.pick-btn.is-ghost{flex:none;padding:0 11px;color:var(--muted);border-style:dashed}
+.pick-btn:active{background:var(--accent-soft);color:var(--accent-deep)}
+.pick-btn.is-primary:active{background:var(--accent-deep);color:#fff}
+.pick-src{margin:9px 0 0;font-size:9px;line-height:1.5;color:var(--muted-light,var(--muted));letter-spacing:.02em}
+
+/* 快速记录：和保存同一列，二级动作，不做成第二个主按钮 */
+.quick-save{
+  display:block;width:100%;height:32px;margin-bottom:8px;
+  background:transparent;border:0;color:var(--muted);
+  font-size:10.5px;letter-spacing:.03em;
+}
+.quick-save[hidden]{display:none}
+.quick-save:active{color:var(--accent-deep)}
+
 /* ── filters ─────────────────────────────────────────── */
 .filter-row{
   display:flex;gap:6px;margin:15px -22px 0;padding:0 22px 1px;
@@ -415,6 +500,18 @@ img{display:block}
   box-shadow:0 5px 14px -8px rgba(52,68,120,.42),inset 0 0 0 1px rgba(143,167,242,.28),inset 0 1px 0 rgba(255,255,255,.85);
 }
 
+/* ── 从「新建」页选完选项：表单当抽屉从底部推上来 ────────────────
+   以前是先把新建页的圆收回去（280ms），再让表单走 pageIn（淡入 + 上移 8px），
+   观感是「先收掉、再弹出」，中间那一下空白很割裂。
+   现在新建页留在下面不动，表单直接 translateY(100%) → 0 推上来；
+   返回时反向收回底部，用户看到的就是原样的新建页。 */
+/* 用 id 选择器：文件后面还有 `.page:not(.detail-page).open{animation:lingPageIn}`
+   （同样是 3 个类，且更靠后），同级会被它盖掉，这里必须高一级。 */
+#addPage.qa-sheet.open{animation:qaSheetIn .38s cubic-bezier(.22,.9,.26,1) both}
+#addPage.qa-sheet.closing{animation:qaSheetOut .28s cubic-bezier(.4,0,.6,1) both;pointer-events:none}
+@keyframes qaSheetIn{from{opacity:1;transform:translateY(100%)}to{opacity:1;transform:none}}
+@keyframes qaSheetOut{from{opacity:1;transform:none}to{opacity:1;transform:translateY(100%)}}
+
 /* ── overlays / pages ───────────────────────────────── */
 .page{
   position:absolute;inset:0;z-index:40;background:#fff;
@@ -432,7 +529,14 @@ img{display:block}
 .page-title{font-family:var(--serif);font-size:15px;font-weight:600;letter-spacing:.05em;text-align:center}
 .page-body{flex:1;min-height:0;overflow-y:auto;padding:2px 22px 24px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .page-body::-webkit-scrollbar{display:none}
-.page-footer{flex:none;padding:12px 22px 20px;background:linear-gradient(180deg,rgba(255,255,255,0),#fff 24%)}
+/* 页脚渐隐：结尾色必须等于页面底色。原来写死 #fff，深色主题下表单底部
+   会浮出一条白带（快速记录那行字直接糊在上面看不清）。
+   --page-surface 跟 `.page` 的实际底色对齐，cinema 单独覆盖（它用 bg-surface）。 */
+.page-footer{
+  --page-surface:var(--paper);
+  flex:none;padding:12px 22px 20px;
+  background:linear-gradient(180deg,transparent,var(--page-surface) 24%);
+}
 .text-btn{font-size:11.5px;color:var(--muted);letter-spacing:.02em;display:flex;align-items:center;gap:5px;justify-self:start}
 .text-btn .icon{width:17px;height:17px}
 .icon-only{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;color:var(--ink-soft);justify-self:end}
@@ -713,12 +817,15 @@ img{display:block}
   --glass-bg:linear-gradient(135deg,rgba(255,255,255,.78),rgba(243,247,255,.46));
   --glass-border:rgba(255,255,255,.88);
   --glass-shadow:0 12px 28px -26px rgba(52,68,120,.42);
+  /* 首页主画布的底色。原先这里写死 #fff：深色主题下卡片是透明的，
+     浅色正文直接压在白色 #main 上 —— 这就是「午夜蓝/午夜放映室字看不清」的根因。 */
+  --main-bg:#fff;
 }
 #main{
   background:
     radial-gradient(ellipse at 6% 0%,rgba(143,167,242,.13),transparent 46%),
     radial-gradient(ellipse at 92% 16%,rgba(167,143,224,.10),transparent 48%),
-    #fff;
+    var(--main-bg,#fff);
 }
 .record-list{display:flex;flex-direction:column;gap:8px}
 .record{
@@ -744,7 +851,9 @@ img{display:block}
   -webkit-backdrop-filter:blur(18px) saturate(165%);
 }
 .wish:last-child{margin-bottom:0;border-bottom:1px solid var(--glass-border)}
-.wish.done{background:linear-gradient(135deg,rgba(255,255,255,.64),rgba(243,247,255,.36))}
+/* 「已看完」不再画一层写死的白渐变：深色主题（cinema / midnight / ink）下
+   那会变成一块白板。改用主题自己的玻璃底，靠 check + 正文降透明度表达「完成」。 */
+.wish.done{background:var(--glass-bg);box-shadow:none}
 .wish-hint{
   margin-top:18px;padding:10px 12px;border:1px solid var(--glass-border);border-radius:12px;
   background:var(--glass-bg);color:var(--muted);backdrop-filter:blur(16px);
@@ -1134,7 +1243,8 @@ img{display:block}
   box-shadow:0 12px 26px -16px rgba(20,28,45,.62);
   backdrop-filter:blur(14px) saturate(150%);-webkit-backdrop-filter:blur(14px) saturate(150%);
 }
-.dt-art-cta:active{transform:translateX(-50%) scale(.96)}
+/* 按压反馈统一交给 app.js 的 WAAPI（会保留 translateX(-50%)），这里不再写 :active 变换，
+   否则两条 transform 会互相覆盖：:active 这条不带过渡，按下去是硬跳。 */
 .dt-art-cta .icon{width:14px;height:14px;stroke-width:1.6}
 
 /* 图片页码：移到图片顶部中央，避开左右操作按钮 */
@@ -1870,6 +1980,11 @@ html{background:#EEF1F7}
   --page-bg:#0E121A; --hero-start:#244F68; --hero-end:#101923;
   --surface-2:#1C222E; --nav-bg:rgba(24,29,39,.72); --nav-bg2:rgba(20,24,33,.5);
   --card-bg:#1A202B; --card-line:rgba(255,255,255,.10); --page-bg-rgb:14,18,26; --danger:#D98790;
+  /* 深色下 #main / 玻璃卡不能再是白的 */
+  --main-bg:#0E121A;
+  --glass-bg:linear-gradient(135deg,rgba(30,37,50,.90),rgba(22,27,37,.72));
+  --glass-border:rgba(255,255,255,.10);
+  --glass-shadow:0 12px 28px -26px rgba(0,0,0,.7);
 }
 
 /* ══ 组件级主题覆盖 ══ */
@@ -1964,43 +2079,9 @@ input,textarea{color:var(--ink)}
 .now-edit .icon{width:16px;height:16px;stroke-width:1.7}
 .now-edit:active{transform:scale(.9);background:rgba(17,23,35,.44)}
 
-/* v1.9.1 · 卡片整理：统一状态 / 顶部底部渐变区+胶囊按钮 / ghost / 孔洞跟随 */
+/* v1.9.1 · 卡片整理：只用一条基础过渡，整理态的完整样式见文末「4. 整理模式」 */
 #recordList .record{transition:transform .18s ease,opacity .18s ease}
-#recordList.organizing .record{opacity:.68}
-/* 原位留白：拖动中原卡隐形态只占位（空位），跟随落点随时让位 */
-#recordList .record.drag-placeholder{opacity:0;pointer-events:none}
 .drag-active,.drag-active *{user-select:none!important;-webkit-user-select:none!important}
-.drag-ghost{
-  position:fixed;z-index:90;pointer-events:none;margin:0;
-  transition:box-shadow .22s ease;opacity:.97;
-  box-shadow:0 4px 14px -8px rgba(20,30,70,.25);
-}
-.drag-ghost.lift{box-shadow:0 26px 64px -22px rgba(20,30,70,.55)}
-.drag-zone{
-  position:fixed;left:0;right:0;z-index:80;
-  display:flex;align-items:center;justify-content:center;
-  opacity:0;pointer-events:none;transition:opacity .2s ease;
-}
-.drag-zone.show{opacity:1}
-.drag-zone-top{
-  top:0;height:calc(88px + var(--ling-sat, 0px));padding-top:var(--ling-sat, 0px);
-  background:linear-gradient(180deg,rgb(var(--page-bg-rgb)) 0%,rgba(var(--page-bg-rgb),.88) 42%,rgba(var(--page-bg-rgb),0) 100%);
-}
-.drag-zone-bottom{
-  bottom:0;height:calc(88px + var(--ling-sab, 0px));padding-bottom:var(--ling-sab, 0px);
-  background:linear-gradient(0deg,rgb(var(--page-bg-rgb)) 0%,rgba(var(--page-bg-rgb),.88) 42%,rgba(var(--page-bg-rgb),0) 100%);
-}
-.drag-chip{
-  display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 15px;border-radius:999px;
-  font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--ink-soft);
-  background:var(--paper);border:1px solid var(--hair);
-  box-shadow:0 8px 24px -12px rgba(20,30,70,.35);
-  transition:transform .18s cubic-bezier(.2,.8,.2,1),background .18s ease,color .18s ease,border-color .18s ease;
-}
-.drag-chip .icon{width:15px;height:15px}
-.drag-chip-danger{color:var(--danger)}
-.drag-zone-top.active .drag-chip{color:#fff;background:var(--accent-deep);border-color:var(--accent-deep);transform:scale(1.07)}
-.drag-zone-bottom.active .drag-chip{color:#fff;background:var(--danger);border-color:var(--danger);transform:scale(1.07)}
 
 /* v1.8.6 · 居中删除确认 modal */
 .modal-layer{
@@ -2045,20 +2126,33 @@ input,textarea{color:var(--ink)}
 .drawer-btn small{font-size:10px;font-weight:400;color:var(--muted);letter-spacing:.02em}
 
 /* ══════════════════════════════════════════════════════
-   v2.0.2 · 新建菜单：以加号为中心 clip-path 圆形展开（恢复）
-   覆盖率 >85% 后菜单项按 4 帧（≈66ms）交错进入
+   v2.4 · 新建菜单：以加号为中心圆形展开
    ══════════════════════════════════════════════════════ */
+/* 掉帧根因修复
+   旧做法用 clip-path:circle() 做圆形展开。clip-path 在 Chromium/Android WebView 里
+   不是可合成属性 —— 每帧都要对整层做一次全屏裁剪+重绘，帧时间随半径增长而变长；
+   如果叠上首帧的样式重算与光栅化，就会一阵卡一阵顺。
+   新做法：一个纯色大圆 + transform:scale()。transform 完全交给合成器，不触发布局与重绘。 */
 .qa-layer{
   position:absolute;inset:0;z-index:46;display:none;
-  background:var(--page-bg,#EEF1F7);
-  clip-path:circle(var(--qa-r,0px) at var(--qa-x,50%) var(--qa-y,50%));
-  will-change:clip-path;
+  background:transparent;overflow:hidden;
 }
 .qa-layer.open{display:block}
-.qa-inner{
-  position:absolute;inset:0;display:flex;flex-direction:column;
-  padding:calc(74px + var(--ling-sat,0px)) var(--ling-gutter,22px) calc(40px + var(--ling-sab,0px));
+.qa-bg{
+  position:absolute;left:0;top:0;width:0;height:0;border-radius:50%;z-index:0;
+  background:var(--page-bg,#EEF1F7);
+  transform:scale(0);transform-origin:50% 50%;
+  will-change:transform;pointer-events:none;
+  backface-visibility:hidden;
+  transition:transform 420ms cubic-bezier(.22,.9,.26,1);
 }
+.qa-inner{
+  position:absolute;inset:0;z-index:1;display:flex;flex-direction:column;
+  padding:calc(74px + var(--ling-sat,0px)) var(--ling-gutter,22px) calc(40px + var(--ling-sab,0px));
+  opacity:0;transition:opacity .2s ease .22s;
+}
+.qa-layer.open .qa-inner{opacity:1}
+.qa-layer.closing .qa-inner{opacity:0;transition-delay:0s;transition-duration:.1s}
 .qa-head{padding:4px 2px 0;flex:none}
 .qa-title{margin:0;font-family:var(--serif);font-size:23px;font-weight:600;color:var(--ink);letter-spacing:.02em}
 .qa-sub{margin:6px 0 0;font-size:11px;color:var(--muted);letter-spacing:.03em}
@@ -2234,6 +2328,11 @@ input,textarea{color:var(--ink)}
   --card-bg:var(--bg-surface);
   --card-line:var(--line);
   --danger:var(--state-danger);
+  /* 主画布与玻璃卡：不能继承 :root 的白底 */
+  --main-bg:var(--bg-sunken);
+  --glass-bg:linear-gradient(135deg,rgba(26,32,41,.92),rgba(17,21,27,.82));
+  --glass-border:var(--line-soft);
+  --glass-shadow:none;
   --btn-bg:var(--brand);
   --btn-fg:var(--text-on-brand);
   --toast-bg:rgba(233,236,242,.96);
@@ -2258,7 +2357,9 @@ input,textarea{color:var(--ink)}
 .add-btn{background:var(--add-grad);box-shadow:var(--add-shadow)}
 
 /* ── D. 置顶标识（此前 .pin-badge / .record.pinned 无任何样式） ── */
-.record{position:relative}
+/* 注意：ghost 是 .record 的克隆体，必须用 :not(.drag-ghost) 排除，
+   否则这条 position:relative 会盖掉 .drag-ghost 的 position:fixed（见文末「3. 拖动 ghost 定位兜底」） */
+.record:not(.drag-ghost){position:relative}
 .record.pinned .record-index{color:var(--accent-deep)}
 .record.pinned .record-index::after{width:14px;opacity:.85}
 .pin-badge{
@@ -2276,11 +2377,12 @@ input,textarea{color:var(--ink)}
 :root[data-theme="cinema"] #app{background:var(--bg-page)}
 :root[data-theme="cinema"] .page:not(.detail-page),
 :root[data-theme="cinema"] .overlay-head{background:var(--bg-surface)}
+:root[data-theme="cinema"] .page-footer{--page-surface:var(--bg-surface)}
 :root[data-theme="cinema"] .sheet,
 :root[data-theme="cinema"] .drawer,
 :root[data-theme="cinema"] .modal-card,
 :root[data-theme="cinema"] .qa-item{background:var(--bg-surface)}
-:root[data-theme="cinema"] .qa-layer{background:var(--bg-page)}
+:root[data-theme="cinema"] .qa-bg{background:var(--bg-page)}
 :root[data-theme="cinema"] .drag-chip{background:var(--bg-raised)}
 :root[data-theme="cinema"] .empty-state{background:var(--bg-surface);border-color:var(--line)}
 
@@ -2529,8 +2631,9 @@ input,textarea{color:var(--ink)}
 :root[data-theme="cinema"] .reader-pill{
   background:var(--bg-surface);border-color:var(--line);color:var(--text-secondary);
 }
+/* 选中态底色由 .reader-blob 承载（v2.4.1），pill 自身保持透明 */
 :root[data-theme="cinema"] .reader-pill.active{
-  background:var(--brand-soft);border-color:var(--brand-line);color:var(--text-primary);
+  background:transparent;border-color:transparent;color:var(--brand-strong);
 }
 :root[data-theme="cinema"] .attach-btn{background:transparent;border-color:var(--line);color:var(--text-tertiary)}
 :root[data-theme="cinema"] .attach-btn:active{background:var(--brand-soft);color:var(--brand-strong)}
@@ -2559,3 +2662,567 @@ input,textarea{color:var(--ink)}
 :root[data-theme="cinema"] .drawer-note{color:var(--text-tertiary)}
 :root[data-theme="cinema"] .range-labels{color:var(--text-tertiary)}
 :root[data-theme="cinema"] .section-title .count{color:var(--text-tertiary)}
+
+/* ══════════════════════════════════════════════════════
+   v2.4 · 交互打磨（对所有主题生效）
+   1. 筛选栏水滴指示块      2. 详情页从点击处展开
+   3. 拖动 ghost 定位兜底    4. 深色主题文字对比度
+   ══════════════════════════════════════════════════════ */
+
+/* ── 1. 筛选栏水滴 ──────────────────────────────────────
+   与底部导航同一套液态逻辑：前沿先到、后沿追赶，中途自然拉宽。
+   用 left/width 驱动（不用 scaleX，圆角不会被拉扁）。
+   指示块由 blob 提供，选中的 chip 自身透明，只负责改字色。 */
+:root{
+  --filter-pill-bg:var(--accent-deep);
+  --filter-pill-fg:#fff;
+  --filter-pill-line:transparent;
+}
+/* 午夜蓝：--accent-deep 是浅蓝，白字只有 1.8:1，必须换成浅底深字 */
+:root[data-theme="midnight"]{
+  --filter-pill-bg:rgba(143,168,240,.20);
+  --filter-pill-fg:#C9D6FB;
+  --filter-pill-line:rgba(143,168,240,.36);
+}
+:root[data-theme="cinema"]{
+  --filter-pill-bg:var(--brand-soft);
+  --filter-pill-fg:var(--brand-strong);
+  --filter-pill-line:var(--brand-line);
+}
+
+.filter-row{position:relative}
+.filter-blob{
+  position:absolute;z-index:0;left:0;top:0;width:0;height:31px;
+  border-radius:999px;pointer-events:none;opacity:0;
+  background:var(--filter-pill-bg);
+  box-shadow:inset 0 0 0 1px var(--filter-pill-line);
+}
+.filter{position:relative;z-index:1}
+/* 选中态交给 blob，chip 本身透明（cinema / midnight 的旧底色一律让位） */
+.filter.active{
+  background:transparent!important;
+  border-color:transparent!important;
+  color:var(--filter-pill-fg)!important;
+}
+
+/* ── 在看页作品栏：与筛选栏同一套水滴（v2.4.1） ──────────
+   pill 自己不再画底色，改为由 .reader-blob 承载，
+   这样切换作品时是「水滴吸附滑过去」，而不是底色硬切。 */
+:root{
+  --reader-pill-bg:var(--accent-soft);
+  --reader-pill-fg:var(--accent-deep);
+  --reader-pill-line:rgba(88,114,198,.22);
+  --reader-pill-base:#fff;
+}
+:root[data-theme="cinema"]{
+  --reader-pill-bg:var(--brand-soft);
+  --reader-pill-fg:var(--brand-strong);
+  --reader-pill-line:var(--brand-line);
+  --reader-pill-base:var(--bg-surface);
+}
+:root[data-theme="midnight"]{
+  --reader-pill-bg:rgba(129,153,232,.20);
+  --reader-pill-fg:#C9D6FB;
+  --reader-pill-line:rgba(143,168,240,.34);
+  --reader-pill-base:var(--paper);
+}
+.reader-switch{position:relative}
+.reader-blob{
+  position:absolute;z-index:0;left:0;top:0;width:0;height:30px;
+  border-radius:99px;pointer-events:none;opacity:0;
+  background:var(--reader-pill-bg);
+  box-shadow:inset 0 0 0 1px var(--reader-pill-line);
+}
+.reader-pill{position:relative;z-index:1;background:var(--reader-pill-base)}
+.reader-pill.active{
+  background:transparent!important;
+  border-color:transparent!important;
+  color:var(--reader-pill-fg)!important;
+}
+
+/* ── 2. 详情页从点击处展开 ──────────────────────────────
+   .page.open 原本挂 pageIn（淡入 + 上移 8px），详情页改用 JS 驱动 scale，
+   因此这里必须把那条 animation 关掉，否则两者会互相打架。 */
+.detail-page.open{animation:none}
+
+/* ── 3. 拖动 ghost 定位兜底 ────────────────────────────
+   ghost 本身是 <div>，克隆出来的卡片在它内部。这里只兜底两件事：
+   外层永远是 fixed（不会被任何泛化的 .record 规则拽回文档流），
+   内层卡片不参与命中测试（否则会挡住指针、触发长按菜单）。 */
+.drag-ghost{
+  position:fixed!important;
+  margin:0!important;
+  z-index:90!important;
+}
+.drag-ghost > .record{
+  position:relative!important;   /* 内层只在 ghost 里当普通块，不定位到别处 */
+  margin:0!important;
+}
+/* 拖动中 ghost 内的图片/图标不要再触发长按菜单或选择 */
+.drag-ghost,.drag-ghost *{pointer-events:none!important;-webkit-user-drag:none}
+
+/* ── 4. 深色主题文字对比度 ─────────────────────────────
+   以下规则原本写死深灰（#596170 / #5D6472 / #737B8A 等），
+   在 #141821 上只有 2–3.5:1。改为跟随主题令牌。 */
+:root[data-theme="midnight"] .record-thought,
+:root[data-theme="midnight"] .note p,
+:root[data-theme="midnight"] .note.quote p,
+:root[data-theme="midnight"] .why p{color:var(--ink-soft)}
+:root[data-theme="midnight"] .nav-item{color:#9AA5B8}
+:root[data-theme="midnight"] .nav-item.active{color:var(--accent-deep)}
+:root[data-theme="midnight"] .action-item.danger{color:var(--danger)}
+:root[data-theme="midnight"] .note-delete:active{color:var(--danger);background:rgba(217,135,144,.12)}
+:root[data-theme="midnight"] .ling-sug-item .ls-badge{
+  color:#AEB9F2;background:rgba(129,153,232,.20);
+}
+:root[data-theme="midnight"] .ling-sug-item .ls-badge-song{
+  color:#CBAEF5;background:rgba(160,124,224,.20);
+}
+:root[data-theme="midnight"] .pin-badge{background:var(--paper);color:var(--accent-deep)}
+:root[data-theme="midnight"] .ai-refresh{
+  background:var(--card-bg);border-color:var(--card-line);color:var(--accent-deep);
+}
+/* 在看页「当前作品」卡：底色原本写死成浅色渐变（#F8FAFF→#EEF3FE），
+   午夜蓝下就是白底白字（约 1.2:1）。改为跟随主题表面色。 */
+:root[data-theme="midnight"] .current-card{
+  background:linear-gradient(155deg,var(--card-bg),var(--paper-soft));
+  border-color:var(--card-line);
+  box-shadow:0 18px 34px -32px rgba(0,0,0,.72);
+}
+:root[data-theme="midnight"] .current-foot{
+  background:rgba(255,255,255,.04);border-top-color:var(--hair);
+}
+/* 同一页的随手记输入卡：写死 #fff，深色下输入的文字是浅色（≈1.1:1） */
+:root[data-theme="midnight"] .composer{
+  background:var(--card-bg);border-color:var(--card-line);
+  box-shadow:0 16px 34px -30px rgba(0,0,0,.6);
+}
+
+/* 详情页：深色主题下 --dt-* 已是石墨底浅字，正文不能再写死深灰 */
+.detail-page.dt-dark .work-section p,
+.detail-page.dt-dark .note p,
+.detail-page.dt-dark .note.quote p,
+.detail-page.dt-dark .work-notes .note p{color:var(--dt-ink)}
+.detail-page.dt-dark .work-section .status-line{color:var(--dt-soft)}
+.detail-page.dt-dark .work-section .status-line b{color:var(--dt-fg)}
+.detail-page.dt-dark .work-section h3,
+.detail-page.dt-dark .gallery-head h3{color:var(--dt-soft)}
+
+/* 首页列表在 cinema 下是透明分隔线样式，18px 的 backdrop-filter 纯属白烧 GPU —— 去掉 */
+:root[data-theme="cinema"] .record,
+:root[data-theme="cinema"] .wish{
+  backdrop-filter:none;-webkit-backdrop-filter:none;
+}
+
+@media (prefers-reduced-motion:reduce){
+  .filter-blob{transition:none!important}
+  .qa-bg{transition:none!important}
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   阶段2 · 交互反馈与卡片整理模式
+   ─────────────────────────────────────────────────────────────────
+   口径：
+   · 反馈只做三件事——轻微下压、轻微浮起、轻微淡入，不做夸张弹跳。
+   · 时长：点击 110/180ms · 整理态 200ms · 换位 190ms · 落位 220ms
+             页面切换 220ms · 弹层退出 180ms · 幕布展开 420ms
+   · 全部只碰 transform / opacity；几何在 JS 里一次算好，样式层不读布局。
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── 1. 全局按压基线 ───────────────────────────────── */
+*{-webkit-tap-highlight-color:transparent}
+button{touch-action:manipulation}
+
+/* 页面切换：比原来的 pageIn 更短、位移更小，和其它反馈同一节奏。
+   必须排除详情页——它的展开由 dt-curtain 幕布负责，再叠一个 pageIn 会互相打架 */
+.page:not(.detail-page).open{animation:lingPageIn 220ms cubic-bezier(.22,.9,.26,1) both}
+@keyframes lingPageIn{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+
+/* ── 2. toast 成功 / 失败 ───────────────────────────── */
+.toast.ok{background-image:linear-gradient(0deg,rgba(124,183,160,.22),rgba(124,183,160,.22))}
+.toast.err{background-image:linear-gradient(0deg,rgba(215,127,135,.26),rgba(215,127,135,.26))}
+
+/* ── 3. 弹层退出：补一段反向动画，不再「啪」一下消失 ───────── */
+.sheet-layer.closing{pointer-events:none}
+.sheet-layer.closing .sheet-backdrop{animation:lingFadeOut .16s ease both}
+.sheet-layer.closing .sheet{animation:lingSheetDown .18s cubic-bezier(.4,0,.62,1) both}
+@keyframes lingFadeOut{from{opacity:1}to{opacity:0}}
+@keyframes lingSheetDown{from{transform:none}to{transform:translateY(100%)}}
+
+/* ── 4. 整理模式：卡片轻微浮起，其余后退半步 ───────────────── */
+/* 进入整理后顶栏退到后面 —— 顶部胶囊才能读作「模式提示」而不是压住标题 */
+.screen-topbar{transition:opacity 200ms ease}
+.drag-active .screen-topbar{opacity:.26;pointer-events:none}
+#recordList.organizing .record{
+  opacity:.62;
+  transition:transform 190ms cubic-bezier(.34,1.04,.42,1),opacity 200ms ease;
+}
+/* 孔洞必须始终隐形（上面那条 opacity 与它同权重，且更晚，必须重新声明）。
+   只保留 transform 的过渡：孔洞要让位时是「滑过去」的，但显隐必须是瞬时的 ——
+   淡出的孔洞会让人看见一张卡片在慢慢变透明。 */
+#recordList.organizing .record.drag-placeholder{
+  opacity:0;pointer-events:none;transition-property:transform;
+}
+
+/* ghost = 外层（固定定位，只做位移，绝不过渡）+ 内层克隆卡（只做浮起缩放）。
+   两层分开，位移与缩放才不抢同一个 transform，浮起才能走缓动而不是硬跳。 */
+.drag-ghost{
+  position:fixed;z-index:90;pointer-events:none;margin:0;
+  opacity:.97;
+  transition:opacity 160ms ease;
+  will-change:transform;
+}
+.drag-ghost > .record{
+  margin:0;
+  transform-origin:50% 50%;
+  transform:scale(1);
+  /* 关掉毛玻璃后，原来的半透明渐变底会让下面那张卡的文字透上来（看起来像重影），
+     所以 ghost 换成该主题的实底表面色。 */
+  background:var(--card-bg,var(--paper));
+  /* 浮起 1 → 1.03 走 190ms */
+  transition:transform 190ms cubic-bezier(.2,.8,.25,1),box-shadow 220ms ease;
+  /* 克隆体带着 .record 的毛玻璃时，每帧都要重新采样身后的背景（合成器里最贵的一项）。
+     ghost 底下就是纯色页面底，模糊与否肉眼无差 —— 直接关掉，拖动只花 transform。 */
+  backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+  box-shadow:0 4px 14px -8px rgba(20,30,70,.25);
+}
+.drag-ghost.lift > .record{
+  transform:scale(1.03);
+  box-shadow:0 26px 64px -22px rgba(20,30,70,.55);
+}
+.drag-ghost.zone-hover{opacity:.5}
+
+/* ── 5. 顶部置顶区 / 底部删除区：透明渐变 + 轻量胶囊 ────────── */
+.drag-zone{
+  position:fixed;left:0;right:0;z-index:80;
+  display:flex;justify-content:center;
+  opacity:0;pointer-events:none;
+  transition:opacity .22s ease;
+}
+.drag-zone.show{opacity:1}
+
+.drag-zone-top{
+  top:0;align-items:flex-start;
+  height:calc(108px + var(--ling-sat,0px));
+  padding-top:calc(var(--ling-sat,0px) + 12px);
+  background:linear-gradient(180deg,
+    rgba(var(--page-bg-rgb),.92) 0%,
+    rgba(var(--page-bg-rgb),.66) 34%,
+    rgba(var(--page-bg-rgb),.26) 66%,
+    rgba(var(--page-bg-rgb),0) 100%);
+}
+.drag-zone-bottom{
+  bottom:0;align-items:flex-end;
+  height:calc(108px + var(--ling-sab,0px));
+  padding-bottom:calc(var(--ling-sab,0px) + 12px);
+  background:linear-gradient(0deg,
+    rgba(var(--page-bg-rgb),.92) 0%,
+    rgba(var(--page-bg-rgb),.66) 34%,
+    rgba(var(--page-bg-rgb),.26) 66%,
+    rgba(var(--page-bg-rgb),0) 100%);
+}
+
+/* 胶囊：去投影、降对比，贴着渐变边缘而不是压一块实心面板 */
+.drag-chip{
+  display:inline-flex;align-items:center;gap:6px;height:31px;padding:0 14px;border-radius:999px;
+  font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--ink-soft);
+  background:var(--card-bg,var(--paper));
+  border:1px solid var(--hair);
+  box-shadow:none;
+  transition:transform 200ms cubic-bezier(.22,.9,.26,1.04),background 180ms ease,color 180ms ease,border-color 180ms ease;
+}
+.drag-chip .icon{width:14px;height:14px;stroke-width:1.8}
+.drag-chip-danger{color:var(--danger)}
+.drag-zone-top.active .drag-chip{
+  color:var(--text-on-brand,#fff);background:var(--accent-deep);border-color:var(--accent-deep);
+  transform:scale(1.04);
+}
+.drag-zone-bottom.active .drag-chip{
+  color:#fff;background:var(--danger);border-color:var(--danger);
+  transform:scale(1.04);
+}
+/* 手里拿的就是置顶卡：顶部区这一落是「取消置顶」，用中性色，不抢置顶的强调色 */
+.drag-zone-top.active .drag-chip.drag-chip-unpin{
+  color:var(--ink);background:var(--card-bg);border-color:var(--hair-strong);
+}
+
+/* ── 6. 详情页：卡片圆角矩形拉长成整页 ─────────────────────── */
+/* 详情展开幕布：一开始就是一张和卡片同尺寸的圆角矩形，两轴拉长到整页。
+   尺寸/位置/圆角都由 JS 按源卡片算（见 dtPlaceCurtain），这里只负责“怎么动”。 */
+.dt-curtain{
+  position:absolute;left:0;top:0;width:0;height:0;
+  background:var(--dt-bg,#fff);
+  border-radius:0;
+  transform:scale(0);transform-origin:50% 50%;
+  opacity:0;pointer-events:none;z-index:0;
+  will-change:transform,border-radius;backface-visibility:hidden;
+  /* 曲线不能用 (.22,.9,·)：那是给「小圆点炸开」配的，放到矩形上 24ms 就拉到四成高，
+     看着像闪一下。容器变形用 standard curve，先起速、再匀速拉开、末端收住。
+     opacity 只在前 130ms 淡入：起手那一帧幕布正好压住卡片，硬切会让卡面「瞬间变空白」，
+     淡入才是卡片被吞进去。 */
+  transition:transform 360ms cubic-bezier(.4,0,.2,1),
+             border-radius 360ms cubic-bezier(.4,0,.2,1),
+             opacity 130ms ease-out;
+}
+/* 展开期间详情页底色让位给幕布，幕布外面能看见下面的列表 —— 这才是「从这里长出来」。
+   必须顺手 transition:none：详情页身上挂着 220ms 的 background 过渡，
+   否则底色是「淡出」而不是「让开」，幕布外会糊成一片半透明灰。 */
+.detail-page.dt-reveal{background:transparent;transition:none}
+/* 展开结束那一帧：把底色从 transparent 换回实底时也不能走 220ms 过渡，
+   否则幕布刚收回、底色还在淡入，会闪一下下面的列表 */
+.detail-page.dt-quiet{transition:none}
+.detail-page.dt-reveal .dt-curtain{opacity:1}
+.detail-page.dt-reveal .detail-scroll{position:relative;z-index:1}
+
+/* 内容显隐：打开的第一帧必须「原地」隐身。
+   用带过渡的隐藏态会从 opacity:1 淡出，那一瞬间整页内容会盖在列表上闪一下（幕布还很小挡不住）。 */
+.detail-page.dt-reveal .detail-scroll,
+.detail-page.dt-reveal .hero-top{opacity:0;transform:translateY(14px);transition:none}
+.detail-page.dt-show-content .detail-scroll,
+.detail-page.dt-show-content .hero-top{
+  opacity:1;transform:none;
+  /* 210ms 起（幕布已盖过八成），400ms 收干净，早于 440ms 的实底交棒 */
+  transition:opacity 190ms ease,transform 230ms cubic-bezier(.4,0,.2,1);
+}
+/* 收起：内容先淡掉（130ms），幕布同时往回缩；规则放在 show 之后才能盖过它 */
+.detail-page.dt-closing .detail-scroll,
+.detail-page.dt-closing .hero-top{
+  opacity:0;transform:translateY(10px);
+  transition:opacity 130ms ease,transform 160ms ease;
+}
+.detail-page.dt-closing .dt-curtain{
+  transition-duration:300ms;
+  transition-timing-function:cubic-bezier(.42,0,.6,1);
+}
+
+/* ── 7. 按下反馈 ─────────────────────────────────────
+   统一按压由 app.js 的 pressDown/pressUp（WAAPI，110ms 下压 / 180ms 回弹）负责，
+   这里不再叠第二套 CSS :active 变换 —— 两套会互相覆盖，只会更难调。
+   本文件只为「被 PRESS_SKIP 排除、又没有指示块」的元素保留最小的 :active。 */
+
+/* ══════════════════════════════════════════════════════
+   阶段5 · 回顾（时间胶囊 / 月度 / 年度）
+   视觉：午夜放映室的编辑式版面 —— 深色胶片卡 + 极细网格 +
+   紫调高光 + 等宽小字标注。深色卡在所有主题下都保持同一块
+   深底，这样浅色主题里也像一张被放进相册的胶片。
+   ══════════════════════════════════════════════════════ */
+.rv-hero{
+  position:relative;isolation:isolate;overflow:hidden;
+  margin-top:16px;padding:20px 20px 18px;border-radius:20px;
+  background:
+    radial-gradient(130% 95% at 90% 6%, rgba(108,92,231,.34), rgba(108,92,231,0) 58%),
+    radial-gradient(95% 75% at 4% 98%, rgba(45,124,124,.20), rgba(45,124,124,0) 62%),
+    #0A0B10;
+  border:1px solid rgba(255,255,255,.08);
+  box-shadow:0 30px 66px -46px rgba(6,8,16,.95), inset 0 1px 0 rgba(255,255,255,.05);
+}
+.rv-hero-grid{
+  position:absolute;inset:0;z-index:0;pointer-events:none;opacity:.5;
+  background-image:
+    repeating-linear-gradient(to right, rgba(255,255,255,.075) 0 1px, transparent 1px 34px),
+    repeating-linear-gradient(to bottom, rgba(255,255,255,.06) 0 1px, transparent 1px 34px);
+  -webkit-mask-image:radial-gradient(125% 105% at 18% 0%, #000 0%, rgba(0,0,0,.5) 56%, transparent 90%);
+  mask-image:radial-gradient(125% 105% at 18% 0%, #000 0%, rgba(0,0,0,.5) 56%, transparent 90%);
+}
+.rv-hero-glow{
+  position:absolute;right:-52px;bottom:-66px;width:196px;height:196px;border-radius:50%;
+  z-index:0;pointer-events:none;
+  background:radial-gradient(circle, rgba(124,108,240,.46), rgba(124,108,240,0) 70%);
+}
+.rv-hero-in{position:relative;z-index:1;display:flex;flex-direction:column;gap:13px}
+.rv-hero-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.rv-pill{
+  display:inline-flex;align-items:center;gap:7px;padding:5px 11px 5px 9px;border-radius:999px;
+  font-size:8.5px;font-weight:600;letter-spacing:.17em;text-transform:uppercase;
+  color:rgba(255,255,255,.66);background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.13);
+}
+.rv-pill i{width:5px;height:5px;border-radius:50%;background:#8C7BF5;box-shadow:0 0 0 3px rgba(140,123,245,.16)}
+.rv-mono{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:9px;letter-spacing:.12em;color:rgba(255,255,255,.4);
+}
+.rv-hero-main{display:flex;align-items:flex-start;gap:14px}
+.rv-hero-text{flex:1;min-width:0}
+.rv-hero-title{
+  margin:0;color:#F4F5F9;font-size:27px;line-height:1.16;font-weight:300;letter-spacing:-.01em;
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
+}
+.rv-hero-age{
+  margin:8px 0 0;font-size:12px;font-weight:500;letter-spacing:.07em;color:#9484F7;
+}
+.rv-hero-cover{
+  flex:none;width:64px;height:88px;display:block;
+  transform:rotate(-1.6deg);
+  box-shadow:0 18px 30px -20px rgba(0,0,0,.95), 0 0 0 1px rgba(255,255,255,.07);
+  border-radius:8px;
+}
+.rv-hero-cover .cover{width:100%;height:100%;border-radius:8px}
+.rv-hero-cover .cover-glyph{font-size:33px;left:8px;bottom:3px}
+.rv-hero-thought{
+  margin:0;padding-left:12px;border-left:1.5px solid rgba(140,123,245,.5);
+  font-size:12px;line-height:1.95;color:rgba(255,255,255,.64);letter-spacing:.01em;
+  display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden;
+}
+.rv-hero-thought.is-empty{
+  color:rgba(255,255,255,.34);border-left-color:rgba(255,255,255,.14);font-style:normal;
+}
+.rv-hero-foot{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.rv-hero-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:2px}
+.rv-btn{
+  appearance:none;-webkit-appearance:none;cursor:pointer;
+  padding:9px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.15);
+  background:rgba(255,255,255,.07);color:#EDEEF5;
+  font-family:inherit;font-size:11.5px;font-weight:500;letter-spacing:.05em;
+  transition:background .18s ease,border-color .18s ease;
+}
+.rv-btn.primary{
+  background:#6C5CE7;border-color:#8272F2;color:#fff;
+  box-shadow:0 12px 24px -16px rgba(108,92,231,.95);
+}
+.rv-hero.is-empty .rv-hero-title{font-size:23px}
+
+/* ── 月度 / 年度 ── */
+.rv-month-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:26px}
+.rv-month-nav{display:flex;align-items:center;gap:5px}
+.rv-nav-btn{
+  width:28px;height:28px;border-radius:50%;display:grid;place-items:center;
+  color:var(--ink-soft);background:transparent;border:1px solid var(--hair-strong);
+}
+.rv-nav-btn .icon{width:12px;height:12px;stroke-width:1.7}
+.rv-nav-btn:disabled{opacity:.25}
+.rv-month-label{
+  min-width:88px;text-align:center;font-size:12.5px;font-weight:600;letter-spacing:.03em;
+  color:var(--ink);font-variant-numeric:tabular-nums;
+}
+.rv-scope{
+  display:flex;gap:2px;padding:2px;border-radius:999px;
+  background:var(--card-bg);border:1px solid var(--card-line);
+}
+.rv-scope-btn{
+  padding:5px 11px;border-radius:999px;font-size:10.5px;letter-spacing:.05em;
+  color:var(--muted);background:transparent;transition:background .18s ease,color .18s ease;
+}
+.rv-scope-btn.on{background:var(--accent-deep);color:#fff}
+.rv-strip{display:flex;align-items:flex-end;gap:3px;height:58px;margin-top:14px}
+.rv-strip-cell{
+  flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:5px;
+  background:none;border:none;padding:0;
+}
+.rv-strip-bar{
+  width:100%;max-width:13px;border-radius:3px 3px 2px 2px;
+  background:linear-gradient(180deg,var(--accent),var(--accent-violet));opacity:.75;
+}
+.rv-strip-l{font-size:8px;letter-spacing:.02em;color:var(--muted)}
+
+.rv-cards{display:flex;flex-direction:column;gap:9px;margin-top:12px}
+.rv-card{
+  padding:15px 16px;border-radius:16px;
+  background:var(--card-bg);border:1px solid var(--card-line);box-shadow:var(--sh-1);
+}
+.rv-card-empty{padding:15px 16px}
+.rv-eyebrow{
+  display:block;font-size:8.5px;font-weight:600;letter-spacing:.17em;
+  text-transform:uppercase;color:var(--muted);
+}
+.rv-big{
+  margin-top:7px;font-size:34px;line-height:1;font-weight:300;letter-spacing:-.02em;
+  color:var(--ink);font-variant-numeric:tabular-nums;
+}
+.rv-big-u{margin-left:5px;font-size:10.5px;font-weight:500;letter-spacing:.1em;color:var(--muted)}
+.rv-split{margin:9px 0 0;font-size:10px;letter-spacing:.04em;color:var(--muted)}
+.rv-bar{display:flex;align-items:center;gap:9px;margin-top:10px}
+.rv-bar-name{display:flex;align-items:center;gap:6px;width:50px;flex:none;font-size:10.5px;color:var(--ink-soft)}
+.rv-bar-name i{width:6px;height:6px;border-radius:50%;flex:none}
+.rv-bar-track{flex:1;height:5px;border-radius:999px;background:var(--hair);overflow:hidden}
+.rv-bar-fill{display:block;height:100%;border-radius:999px;opacity:.85}
+.rv-bar-n{width:16px;flex:none;text-align:right;font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.rv-avg-row{display:flex;align-items:baseline;gap:7px;margin-top:7px}
+.rv-avg{
+  font-size:32px;line-height:1;font-weight:300;letter-spacing:-.02em;
+  color:var(--ink);font-variant-numeric:tabular-nums;
+}
+.rv-avg-unit{font-size:10px;letter-spacing:.04em;color:var(--muted)}
+.rv-note{margin:9px 0 0;font-size:10.5px;line-height:1.7;color:var(--muted)}
+.rv-empty-line{margin:9px 0 0;font-size:11px;line-height:1.8;color:var(--muted)}
+
+.rv-block{margin-top:22px}
+.rv-feat{
+  display:flex;align-items:flex-start;gap:13px;width:100%;text-align:left;
+  padding:12px;margin-top:9px;border-radius:15px;
+  background:var(--card-bg);border:1px solid var(--card-line);
+}
+.rv-feat .cover{width:46px;height:63px;border-radius:6px}
+.rv-feat .cover .cover-glyph{font-size:21px;left:6px;bottom:2px}
+.rv-feat-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;padding-top:2px}
+.rv-feat-title{
+  font-size:13px;font-weight:600;letter-spacing:.01em;color:var(--ink);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.rv-feat-meta{font-size:9.5px;letter-spacing:.04em;color:var(--muted)}
+.rv-feat-quote{
+  margin-top:2px;font-size:11px;line-height:1.75;color:var(--ink-soft);
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+}
+.rv-caliber{
+  margin:18px 0 0;font-size:9px;line-height:1.9;letter-spacing:.015em;color:var(--muted-light);
+}
+.rv-caliber b{font-weight:500;color:var(--muted)}
+.rv-share-btn{
+  display:flex;align-items:center;justify-content:center;gap:7px;width:100%;
+  margin-top:14px;padding:12px;border-radius:14px;
+  font-family:inherit;font-size:11.5px;font-weight:500;letter-spacing:.06em;
+  color:var(--ink-soft);background:var(--card-bg);border:1px solid var(--card-line);
+}
+.rv-share-btn .icon{width:13px;height:13px;stroke-width:1.7}
+
+/* ── 分享弹层 ── */
+.rv-share-sheet{padding-bottom:26px}
+.rv-share-note{margin:12px 0 13px;font-size:11px;line-height:1.85;color:var(--muted)}
+.rv-share-list{display:flex;flex-direction:column;gap:7px}
+.rv-share-row{
+  display:flex;align-items:center;gap:11px;width:100%;text-align:left;
+  padding:11px 13px;border-radius:13px;
+  background:var(--card-bg);border:1px solid var(--card-line);
+  transition:border-color .18s ease,background .18s ease;
+}
+.rv-share-row.on{border-color:var(--accent);background:var(--accent-soft)}
+.rv-share-box{
+  position:relative;flex:none;width:16px;height:16px;border-radius:5px;
+  border:1.5px solid var(--hair-strong);
+}
+.rv-share-row.on .rv-share-box{background:var(--accent-deep);border-color:var(--accent-deep)}
+.rv-share-row.on .rv-share-box::after{
+  content:'';position:absolute;left:4px;top:1px;width:5px;height:9px;
+  border-right:1.5px solid #fff;border-bottom:1.5px solid #fff;transform:rotate(40deg);
+}
+.rv-share-txt{display:flex;flex-direction:column;gap:2px;min-width:0}
+.rv-share-txt b{font-size:12px;font-weight:500;color:var(--ink)}
+.rv-share-txt small{
+  font-size:10px;color:var(--muted);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.rv-share-preview{
+  margin:14px 0 12px;padding:12px 13px;border-radius:13px;
+  background:var(--paper-soft);border:1px solid var(--hair);
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:10px;line-height:1.9;color:var(--ink-soft);white-space:pre-wrap;
+  max-height:152px;overflow:auto;
+}
+
+/* ── 8. 减少动态效果 ───────────────────────────────── */
+@media (prefers-reduced-motion:reduce){
+  .page.open{animation:none}
+  #addPage.qa-sheet.open,
+  #addPage.qa-sheet.closing{animation:none!important}
+  .detail-page .detail-scroll,
+  .detail-page .hero-top,
+  .dt-curtain{transition:none!important}
+  #recordList.organizing .record{transition:none}
+  .drag-chip{transition:none}
+  .drag-ghost{transition:none}
+  .drag-ghost > .record{transition:none}
+  .sheet-layer.closing .sheet,
+  .sheet-layer.closing .sheet-backdrop{animation:none}
+  #recordList .record{transition:none}
+}

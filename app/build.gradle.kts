@@ -21,8 +21,8 @@ android {
         applicationId = "com.yuwei.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 42
-        versionName = "2.2.3"
+        versionCode = 53
+        versionName = "2.5.1"
     }
 
     signingConfigs {

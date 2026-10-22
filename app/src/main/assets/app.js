@@ -51,6 +51,9 @@
     return Math.max(1, Math.round((now - start) / 86400000) + 1);
   }
   function ratingText(v) {
+    // null 表示「还没打分」（快速记录就是这样存的），不能落到 Number(null)=0 上，
+    // 否则卡片会显示 0.0/10 —— 那是系统编出来的分数。
+    if (v === null || v === undefined || v === '') return '—';
     const n = Number(v);
     if (!Number.isFinite(n)) return '—';
     return n === 10 ? '10' : n.toFixed(1);
@@ -89,7 +92,16 @@
     crop: null,
     ratingEditing: false,
     ratingDraft: 8,
-    galleryMode: 'add'
+    ratingTouched: false,     // 表单里的评分滑杆有没有被真正动过（快速记录据此决定要不要写分数）
+    pickId: null,             // 发现面板当前展示的作品 id（只引用，不复制记录）
+    pickSource: '',           // 'inspire' | 'roll'
+    galleryMode: 'add',
+    // 阶段5 · 回顾
+    rvMode: 'random',         // 'year' | 'random' | 'oldest'（默认随机：打开就有东西可看）
+    rvPickId: null,           // 胶囊当前展示的作品 id（只引用，不复制记录）
+    rvMonth: '',              // 'YYYY-MM'，空 = 本月
+    rvScope: 'month',         // 'month' | 'year'
+    shareParts: { count: true, types: true, rating: true, titles: false, thoughts: false }
   };
 
   // ── data ─────────────────────────────────────────────────
@@ -298,7 +310,7 @@
       localStorage.setItem(DB_KEY, JSON.stringify(db));
       return true;
     } catch (e) {
-      toast('存储空间不足，图片可能太多');
+      toast('存储空间不足，图片可能太多', 'err');
       return false;
     }
   }
@@ -308,12 +320,13 @@
     return db.works.filter(w => w.status === 'finished')
       .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')) || (a.createdAt || 0) - (b.createdAt || 0));
   }
-  // 记录列表显示顺序：置顶优先（按置顶时间）→ 手动排序值 → 默认日期倒序
+  // 记录列表显示顺序：置顶优先 → 手动排序值 → 默认日期倒序
+  // 阶段2：置顶区内也不再按 pinnedAt 时间戳排（那会让 pinnedAt 成为第二套顺序来源），
+  // 统一由 sortNo 决定；置顶只回答「是不是置顶」，顺序只有 sortNo 一个真源。
   function displayFinished() {
     return finishedWorksChronological().slice().reverse().sort((a, b) => {
       const pa = a.pinnedAt || 0, pb = b.pinnedAt || 0;
       if (!!pa !== !!pb) return pa ? -1 : 1;
-      if (pa && pb && pa !== pb) return pb - pa;
       const sa = a.sortNo, sb = b.sortNo;
       if (sa != null && sb != null && sa !== sb) return sa - sb;
       if (sa != null) return -1;
@@ -431,13 +444,14 @@
     </div>`;
   }
 
-  function toast(message) {
+  // 统一反馈：kind = '' | 'ok' | 'err'。同一个元素、同一段时长，不再各写各的提示。
+  function toast(message, kind) {
     const el = $('#toast');
     if (!el) return;
+    el.className = 'toast show' + (kind ? ' ' + kind : '');
     el.textContent = message;
-    el.classList.add('show');
     clearTimeout(toast._t);
-    toast._t = setTimeout(() => el.classList.remove('show'), 1900);
+    toast._t = setTimeout(() => { el.className = 'toast' + (kind ? ' ' + kind : ''); }, 1900);
   }
 
   // 轻震动反馈（需 VIBRATE 权限；不支持时静默跳过）
@@ -448,6 +462,77 @@
     } catch (e) {}
     if (navigator.vibrate) try { navigator.vibrate(ms); } catch (e) {}
   }
+
+  // ── 统一按压反馈（阶段2） ───────────────────────────────
+  // 一对委托监听覆盖所有按钮：按下 110ms 轻微下压，抬起 180ms 回弹。
+  // 用 WAAPI 而不是 CSS :active —— 不少组件已有自己的 transition / :active 变换，
+  // 再叠一条会互相覆盖；动画本身跑在合成线程，不参与布局。
+  // 带独立指示块的组件（筛选胶囊、导航、分段控件）与拖动卡排除在外，避免与指示块错位。
+  const PRESS_SKIP = '.qa-item, .nav-item, .glass-nav, .now-dot, .add-btn, .pin-badge, .filter, .segmented button, #recordList .record, .drag-ghost, .drag-zone';
+  let pressedEl = null, pressedAnim = null, pressedBase = '';
+
+  function pressTarget(e) {
+    const el = e.target.closest('button, [role="button"], .action-item');
+    if (!el || el.disabled) return null;
+    if (el.closest(PRESS_SKIP)) return null;
+    return el;
+  }
+
+  // 关键帧里写 transform 会整条顶掉元素自己的变换。
+  // 「导入图片」这类按钮是靠 translateX(-50%) 居中的，被顶掉后按下瞬间会横向跳半格
+  // ——看起来就是按钮「像水滴一样划走」。所以先把自带的位移读出来，拼进关键帧，
+  // 只覆盖缩放那一段。带旋转/斜切的元素拆不开，索性跳过（宁缺反馈，不要错位）。
+  function pressBaseOf(el) {
+    try {
+      const t = getComputedStyle(el).transform;
+      if (!t || t === 'none') return '';
+      const m = /^matrix\(([^)]+)\)$/.exec(t);
+      if (!m) return null;
+      const p = m[1].split(',').map(Number);
+      if (Math.abs(p[1]) > 0.001 || Math.abs(p[2]) > 0.001) return null;
+      return (p[4] || p[5]) ? 'translate(' + p[4] + 'px,' + p[5] + 'px) ' : '';
+    } catch (e) { return ''; }
+  }
+
+  function pressDown(el) {
+    if (!el || !dragMotionOK()) return;
+    const base = pressBaseOf(el);   // 必须在 pressUp() 之前取：那时的变换才是静止值
+    pressUp();
+    if (base === null) return;
+    pressedEl = el;
+    pressedBase = base;
+    try {
+      pressedAnim = el.animate(
+        [{ transform: base + 'scale(1)' }, { transform: base + 'scale(.965)' }],
+        { duration: 110, easing: 'cubic-bezier(.3,.7,.4,1)', fill: 'forwards' }
+      );
+    } catch (e) { pressedAnim = null; }
+  }
+
+  function pressUp() {
+    const el = pressedEl, anim = pressedAnim, base = pressedBase;
+    pressedEl = null; pressedAnim = null; pressedBase = '';
+    if (!el) return;
+    let s = .965;
+    try {
+      const m = getComputedStyle(el).transform;      // 先读当前缩放，再撤销下压
+      const hit = m && m !== 'none' && m.match(/matrix\(([^)]+)\)/);
+      if (hit) s = parseFloat(hit[1].split(',')[0]) || .965;
+    } catch (e) {}
+    if (anim) { try { anim.cancel(); } catch (e) {} }
+    if (!dragMotionOK()) return;
+    try {
+      el.animate([{ transform: base + 'scale(' + s + ')' }, { transform: base + 'scale(1)' }],
+        { duration: 180, easing: 'cubic-bezier(.34,1.32,.5,1)' });
+    } catch (e) {}
+  }
+
+  document.addEventListener('pointerdown', e => {
+    const el = pressTarget(e);
+    if (el) pressDown(el);
+  }, { passive: true });
+  document.addEventListener('pointerup', pressUp, { passive: true });
+  document.addEventListener('pointercancel', pressUp, { passive: true });
 
   // ── 详情页草稿（按作品 ID 保存，切换页面/作品不丢） ──────
   const draftNotes = (() => {
@@ -496,6 +581,7 @@
     $('#recordFilters').innerHTML = filters.map(f =>
       `<button class="filter${ui.recordFilter === f.key ? ' active' : ''}" data-filter-kind="${f.key}">${f.label}</button>`
     ).join('');
+    placeFilterBlob(true);
 
     const now = readingWorks();
     if (now.length) {
@@ -563,7 +649,7 @@
       if (e.target.closest('button')) { tap = null; return; }
       const card = e.target.closest('.now-card');
       if (!card) { tap = null; return; }
-      tap = { x: e.clientX, y: e.clientY, id: card.dataset.id, moved: false };
+      tap = { x: e.clientX, y: e.clientY, id: card.dataset.id, el: card, moved: false };
     });
     carousel.addEventListener('pointermove', e => {
       if (!tap) return;
@@ -574,7 +660,7 @@
       const current = tap;
       tap = null;
       // 点击卡片 → 跳作品详情页（不再唤起背景图选择）
-      if (!current.moved) openDetail(current.id);
+      if (!current.moved) openDetail(current.id, current.el);
     });
     carousel.addEventListener('pointercancel', () => { tap = null; });
   }
@@ -612,6 +698,8 @@
     $('#wishFilters').innerHTML = filters.map(f =>
       `<button class="filter${ui.wishFilter === f.key ? ' active' : ''}" data-wish-type="${f.key}">${esc(f.label)}</button>`
     ).join('');
+    WISH_BLOB.place(true); // v2.4.1：与首页筛选栏同一套水滴
+    renderDiscover();      // 阶段4：发现条跟着筛选与数据一起更新
 
     if (!wishes.length) {
       $('#wishGroups').innerHTML = '';
@@ -662,6 +750,190 @@
     </article>`;
   }
 
+  // ══════════════════════════════════════════════════════════════════
+  // 阶段4 · 轻量发现：今日灵感（本地规则）+ 随手一抽
+  //
+  // 数据来源只有一个：wishWorks() 里 status==='wish' && !done 的作品，
+  // 以及它们自己的 title / creator / type / tag / why / addedAt / notes。
+  //   · 不新建任何作品记录（「开始记录」是 status 就地改成 reading）；
+  //   · 不推断偏好：所有文案都能在数据里指认（你写过什么、放了几天），
+  //     绝不写「根据你的喜好」这类系统其实没有记录的话；
+  //   · 不签到、不计分、不连续打卡。
+  // 今日灵感用日期做种子 → 同一天稳定、第二天换；随手一抽是即时的。
+  // ══════════════════════════════════════════════════════════════════
+  function wishAddedISO(w) {
+    if (w.addedAt) return w.addedAt;
+    if (w.createdAt) {
+      const d = new Date(w.createdAt);
+      if (!Number.isNaN(d.getTime())) {
+        const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+        return local.toISOString().slice(0, 10);
+      }
+    }
+    return '';
+  }
+
+  // 待体验池：已标记「看完」的不算待体验；跟随当前类型筛选（= 类型过滤）
+  function wishPool() {
+    return wishWorks().filter(w => !w.done && (ui.wishFilter === 'all' || w.type === ui.wishFilter));
+  }
+
+  // 日期种子（FNV-1a）：同一天同一盐值结果固定，不需要任何存储
+  function daySeed(salt) {
+    const s = todayISO() + '|' + salt;
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  }
+
+  // 本地规则打分：写过理由 > 放得久 > 已有笔记；同分先挑放得更久的
+  function inspireRank(pool) {
+    return pool.map(w => {
+      const iso = wishAddedISO(w);
+      const days = iso ? daysSince(iso) : 1;
+      let score = 0;
+      if (w.why) score += 2;
+      if ((w.notes || []).length) score += 1;
+      if (days >= 30) score += 3; else if (days >= 14) score += 2; else if (days >= 7) score += 1;
+      return { w, score, days };
+    }).sort((a, b) => b.score - a.score || a.days - b.days || String(a.w.id).localeCompare(String(b.w.id)));
+  }
+
+  function dailyWish(pool) {
+    const ranked = inspireRank(pool);
+    if (!ranked.length) return null;
+    const top = ranked.slice(0, Math.min(3, ranked.length));
+    return top[daySeed('inspire') % top.length].w;
+  }
+
+  // 理由只用真实字段拼：引用用户自己写的理由、算真实天数、数同类数量
+  function pickReason(w, pool) {
+    const bits = [];
+    const why = String(w.why || '').replace(/\s+/g, ' ').trim();
+    if (why) bits.push('你写过「' + (why.length > 26 ? why.slice(0, 26) + '…' : why) + '」');
+    const iso = wishAddedISO(w);
+    if (iso) {
+      const days = daysSince(iso);
+      bits.push(days > 1 ? '在清单里放了 ' + days + ' 天' : '今天刚加进来');
+    }
+    const same = pool.filter(x => x.id !== w.id && x.type === w.type).length;
+    if (same) bits.push('同类还有 ' + same + ' 部待看');
+    return bits.length ? bits.join(' · ') : '还没有为它写过什么，正好从今天开始';
+  }
+
+  function renderDiscover() {
+    const bar = $('#discoverBar');
+    if (!bar) return;
+    const waiting = wishWorks().filter(w => !w.done);
+    const pool = wishPool();
+    const m = ui.wishFilter === 'all' ? null : TYPES[ui.wishFilter];
+
+    // 待看池空了就收起面板，别留着上一次的残影
+    if (ui.pickId && !pool.some(w => w.id === ui.pickId)) { ui.pickId = null; ui.pickSource = ''; }
+
+    if (!waiting.length) {
+      bar.innerHTML =
+        `<span class="discover-kicker">${icon('spark')}发现</span>
+         <span class="discover-note">想看的还是空的，先留一部进去</span>
+         <button class="discover-btn" data-action="new-wish">添加想看</button>`;
+      renderPick();
+      return;
+    }
+
+    if (!pool.length) {
+      bar.innerHTML =
+        `<span class="discover-kicker">${icon('spark')}发现</span>
+         <span class="discover-note">${m ? '这一类' : '当前'}没有待看的了 · 全部还有 ${waiting.length} 部</span>
+         <button class="discover-btn" data-action="discover-all">看全部</button>`;
+      renderPick();
+      return;
+    }
+
+    const daily = dailyWish(pool);
+    bar.innerHTML =
+      `<button class="discover-main" data-action="discover-inspire">
+         <span class="discover-kicker">${icon('spark')}今日灵感</span>
+         <span class="discover-title">${esc(daily.title)}</span>
+         <span class="discover-sub">${esc(pickReason(daily, pool))}</span>
+       </button>
+       <button class="discover-roll" data-action="discover-roll" aria-label="从待看里随机抽一部">抽一部</button>`;
+    renderPick();
+  }
+
+  function renderPick() {
+    const panel = $('#discoverPick');
+    if (!panel) return;
+    const pool = wishPool();
+    const w = ui.pickId ? pool.find(x => x.id === ui.pickId) : null;
+    if (!w) {
+      panel.hidden = true;
+      panel.innerHTML = '';
+      panel.dataset.pickId = '';
+      return;
+    }
+
+    const m = TYPES[w.type] || TYPES.book;
+    const tag = tagOf(w);
+    const meta = [w.creator, tag === UNCATEGORIZED_TAG ? '' : tag].filter(Boolean).map(esc).join(' · ');
+    const src = ui.pickSource === 'inspire'
+      ? '来自你的待看 · 本地规则挑的，不是 AI 推测'
+      : '来自你的待看 · 本地随机抽的，不是 AI 推测';
+    const listLabel = (m ? m.label : '全部') + ' ' + pool.length + ' 部';
+
+    const first = panel.hidden || panel.dataset.pickId !== w.id;
+    panel.hidden = false;
+    panel.innerHTML =
+      `<div class="pick-inner">
+         <div class="pick-head">
+           <span class="pick-kicker">${ui.pickSource === 'inspire' ? '今日灵感' : '随手一抽'} · ${esc(m.label)}</span>
+           <button class="pick-close" data-action="discover-close" aria-label="收起">${icon('close')}</button>
+         </div>
+         <div class="pick-body">
+           ${coverHTML(w, 'pick-cover')}
+           <div class="pick-info">
+             <h3 class="pick-title">${esc(w.title)}</h3>
+             ${meta ? `<p class="pick-meta">${meta}</p>` : ''}
+             <p class="pick-why">${esc(pickReason(w, pool))}</p>
+           </div>
+         </div>
+         <div class="pick-actions">
+           <button class="pick-btn" data-action="discover-detail" data-id="${w.id}">看详情</button>
+           <button class="pick-btn is-primary" data-action="discover-start" data-id="${w.id}">开始记录</button>
+           <button class="pick-btn is-ghost" data-action="discover-roll">换一个</button>
+         </div>
+         <p class="pick-src">${esc(src)} · ${esc(listLabel)}</p>
+       </div>`;
+    panel.dataset.pickId = w.id;
+
+    // 只在「换了一条」时做一次轻推入（transform + opacity，180ms），可被系统减弱动效覆盖
+    if (first && dragMotionOK()) {
+      panel.animate(
+        [{ opacity: 0, transform: 'translateY(-6px)' }, { opacity: 1, transform: 'none' }],
+        { duration: 180, easing: 'cubic-bezier(.22,.9,.26,1)' }
+      );
+    }
+  }
+
+  // 抽选：统一入口。inspire 用日期种子，roll 即时随机且避开手上这一条
+  function drawWish(kind) {
+    const pool = wishPool();
+    if (!pool.length) { toast('这部待看里没有可挑的了'); return null; }
+    let w;
+    if (kind === 'inspire') {
+      w = dailyWish(pool);
+    } else {
+      const others = pool.filter(x => x.id !== ui.pickId);
+      const list = others.length ? others : pool;
+      w = list[Math.floor(Math.random() * list.length)] || list[0];
+    }
+    if (!w) return null;
+    ui.pickId = w.id;
+    ui.pickSource = kind === 'inspire' ? 'inspire' : 'roll';
+    renderPick();
+    buzzer(6);
+    return w;
+  }
+
   // ── rendering: reading ──────────────────────────────────
   function renderReading() {
     const reading = readingWorks();
@@ -683,6 +955,7 @@
     $('#readerSwitcher').innerHTML = reading.length > 1
       ? `<div class="reader-switch">${reading.map(w => `<button class="reader-pill${w.id === ui.readingId ? ' active' : ''}" data-action="select-reader" data-id="${w.id}">${coverHTML(w)}<span>${esc(w.title)}</span></button>`).join('')}</div>`
       : '';
+    READER_BLOB.place(true); // v2.4.1：切换在看作品时水滴吸附过去
 
     const w = getWork(ui.readingId);
     if (!w) return;
@@ -999,18 +1272,230 @@
       </button>`;
   }
 
-  function openDetail(id) {
+  // ── 阶段2 · 详情页沉浸式展开（卡片本身长成整页） ──────────────────
+  // 加号为什么顺？因为它是「纯色块 + transform:scale()」——只碰合成属性，
+  // 主线程再忙也不会掉帧。详情页此前是给整页做 scale(.62→1)，
+  // 整页（含大图与滚动容器）每一帧都要按新比例重新光栅化，越放大越贵，所以发涩。
+  //
+  // 幕布形状：一开始是被点卡片自己的圆角矩形（宽高 = 卡片宽高），
+  // 然后两轴非等比拉长到整页（卡片 350×92 → 390×844，主要是纵向长出去），
+  // 视觉上就是「这张卡被拉开成了详情页」，而不是一颗圆点炸开。
+  // 代价：非等比缩放下 border-radius 会被拉成椭圆，所以圆角要做反向补偿
+  // （x 轴半径 / sx，y 轴半径 / sy），并随展开一起收到 0，交棒时才是方的整页。
+  const DT_CURTAIN_MS = 360;
+  const DT_CLOSE_MS = 300;   // 收起比展开快一档：退出用 ease-in，不让人等
+  const DT_CARD_RADIUS = 16; // 卡片圆角兜底值，实际取源元素的计算样式
+
+  let dtSeq = 0;
+  let dtTimers = [];
+  // 打开时的来源几何（被点卡片的中心 + 半径）。收起时反向收回这里，
+  // 而不是回到屏幕中心——「卡片成为详情页」这个隐喻才不会在关闭时断掉。
+  let dtOrigin = null;
+
+  function dtMotionOK() {
+    try { return !matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return true; }
+  }
+
+  function dtClearTimers() {
+    dtTimers.forEach(clearTimeout);
+    dtTimers = [];
+  }
+
+  function dtCurtain() {
+    const page = $('#detailPage');
+    if (!page) return null;
+    let el = page.querySelector('.dt-curtain');
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'dt-curtain';
+      el.setAttribute('aria-hidden', 'true');
+      page.insertBefore(el, page.firstChild);
+    }
+    return el;
+  }
+
+  // 幕布几何：起手矩形 = 被点卡片的矩形（相对详情页）。
+  // 幕布元素本身固定为「整页大小」，靠 transform-origin + 非等比 scale 收到卡片的位置与尺寸，
+  // 这样全程只动 transform / border-radius，不触发布局。
+  function dtGeometry(srcEl) {
+    const page = $('#detailPage');
+    if (!page) return null;
+    const pr = page.getBoundingClientRect();
+    if (!pr.width || !pr.height) return null;
+
+    const r = srcEl && srcEl.getBoundingClientRect ? srcEl.getBoundingClientRect() : null;
+    const hasCard = !!(r && r.width > 8 && r.height > 8);
+    // 没有来源卡片（深链、刷新后直接进详情）就退化成屏幕中上部一块横向小卡
+    const w0 = hasCard ? clampNum(r.width, 8, pr.width) : pr.width * 0.66;
+    const h0 = hasCard ? clampNum(r.height, 8, pr.height) : pr.height * 0.14;
+    const x0 = hasCard
+      ? clampNum(r.left - pr.left, 0, Math.max(0, pr.width - w0))
+      : (pr.width - w0) / 2;
+    const y0 = hasCard
+      ? clampNum(r.top - pr.top, 0, Math.max(0, pr.height - h0))
+      : pr.height * 0.42 - h0 / 2;
+
+    let radius = DT_CARD_RADIUS;
+    if (hasCard) {
+      try {
+        const cs = getComputedStyle(srcEl);
+        radius = parseFloat(cs.borderTopLeftRadius) || DT_CARD_RADIUS;
+      } catch (e) { /* 读不到就用兜底值 */ }
+    }
+
+    const sx = clampNum(w0 / pr.width, 0.02, 1);
+    const sy = clampNum(h0 / pr.height, 0.02, 1);
+
+    return {
+      w: pr.width, h: pr.height,
+      sx, sy,
+      // 缩放原点：scale 之后矩形要正好落在 (x0,y0,w0,h0) 上。
+      // 缩放满足 left = ox·(1−sx)，所以 ox = x0/(1−sx)。
+      // 之前拿卡片中心当原点：水平方向因为卡片居中碰巧成立，纵向就整体偏移（高处的卡片能差 20 多像素）。
+      ox: x0 / Math.max(1 - sx, 0.02),
+      oy: y0 / Math.max(1 - sy, 0.02),
+      r: radius
+    };
+  }
+
+  // expanded=true → 整页；false → 回到卡片矩形
+  function dtPlaceCurtain(curtain, g, expanded, withTransition) {
+    if (!curtain || !g) return;
+    curtain.style.width = g.w + 'px';
+    curtain.style.height = g.h + 'px';
+    curtain.style.left = '0px';
+    curtain.style.top = '0px';
+    curtain.style.transformOrigin = g.ox + 'px ' + g.oy + 'px';
+    curtain.style.transition = withTransition ? '' : 'none';
+    curtain.style.transform = expanded ? 'scale(1,1)' : 'scale(' + g.sx + ',' + g.sy + ')';
+    // 视觉圆角 = css 圆角 × 该轴缩放比，两轴缩放比不同 → 用「水平/垂直」双值圆角反向补偿，
+    // 起手看上去才是和卡片一样的正圆角；展开过程中圆角同步收到 0，交棒给整页底不跳。
+    curtain.style.borderRadius = expanded
+      ? '0px'
+      : (g.r / g.sx) + 'px / ' + (g.r / g.sy) + 'px';
+  }
+
+  function playDetailReveal(srcEl) {
+    const page = $('#detailPage');
+    if (!page) return;
+    const g = dtGeometry(srcEl);
+    if (!g) return;
+    const curtain = dtCurtain();
+    if (!curtain) return;
+
+    dtClearTimers();
+    const seq = ++dtSeq;
+    dtOrigin = { id: ui.detailId, el: srcEl || null, g };
+
+    // 起手：幕布贴在卡片上（同位置同圆角），内容原地隐身，详情页底色让位。
+    // 幕布这一帧不能带过渡，否则会先看见它在上一轮的旧位置滑过来。
+    dtPlaceCurtain(curtain, g, false, false);
+    page.classList.remove('dt-show-content');
+    void curtain.offsetWidth;                       // 让起手那帧先落定，过渡才会生效
+
+    if (!dtMotionOK()) {
+      page.classList.add('dt-reveal');
+      dtPlaceCurtain(curtain, g, true, false);
+      page.classList.remove('dt-reveal');
+      return;
+    }
+
+    // 恢复过渡后再改：幕布淡入，卡片是「被吞进去」而不是被一块纯色瞬间替换
+    dtPlaceCurtain(curtain, g, true, true);         // 拉长到整页，全程合成线程
+    page.classList.add('dt-reveal');
+
+    dtTimers.push(setTimeout(() => {
+      if (seq !== dtSeq) return;
+      page.classList.add('dt-show-content');
+    }, 210));
+
+    dtTimers.push(setTimeout(() => {
+      if (seq !== dtSeq) return;
+      page.classList.add('dt-quiet');                 // 底色 instant 切回实底
+      page.classList.remove('dt-reveal', 'dt-show-content');
+      dtPlaceCurtain(curtain, g, false, false);      // 实底已由页面背景接管，幕布收回卡片位
+      dtTimers.push(setTimeout(() => page.classList.remove('dt-quiet'), 60));
+    }, DT_CURTAIN_MS + 80));
+  }
+
+  // 收起时的目标矩形：优先取「现在还在页面上的同一张卡片」，
+  // 数据变动 / 重排 / 转屏后位置才是准的；取不到再退回打开时的快照，
+  // 最后才回退到屏幕中央的兜底框。
+  function dtResolveOrigin() {
+    if (!dtOrigin) return null;
+    const sized = el => {
+      if (!el || !el.isConnected || !el.getBoundingClientRect) return false;
+      const r = el.getBoundingClientRect();
+      return r.width > 4 && r.height > 4;
+    };
+    const id = dtOrigin.id;
+    const cands = [dtOrigin.el];
+    if (id) {
+      ['.record', '.now-card', '.wish-main', '.current-main'].forEach(sel => {
+        cands.push(document.querySelector(sel + '[data-id="' + id + '"]'));
+      });
+    }
+    const hit = cands.find(sized);
+    if (hit) {
+      const g = dtGeometry(hit);
+      if (g) return g;
+    }
+    // 卡片已经不在了（被筛掉 / 切了页 / 删了）：退回打开时的快照，再退到屏幕中央
+    return dtOrigin.g || null;
+  }
+
+  function playDetailCollapse(onDone) {
+    const page = $('#detailPage');
+    if (!page) { onDone(); return; }
+    const curtain = page.querySelector('.dt-curtain');
+    if (!curtain || !dtMotionOK()) { onDone(); return; }
+    const g = dtResolveOrigin() || dtGeometry(null);
+    if (!g) { onDone(); return; }
+
+    dtClearTimers();
+    const seq = ++dtSeq;
+
+    // 收起：内容淡掉的同时幕布缩回被点的那张卡片。
+    // 幕布先固定在整页（不改，避免位置跳），再加 dt-closing —— 这条类负责把内容从 1 淡到 0 并给上过渡。
+    dtPlaceCurtain(curtain, g, true, false);
+    page.classList.add('dt-reveal', 'dt-closing');
+    page.classList.remove('dt-show-content');
+    void curtain.offsetWidth;
+    dtPlaceCurtain(curtain, g, false, true);
+
+    dtTimers.push(setTimeout(() => {
+      if (seq !== dtSeq) return;
+      page.classList.remove('dt-closing');
+      onDone();
+    }, DT_CLOSE_MS + 40));
+  }
+
+  function openDetail(id, srcEl) {
     const w = getWork(id);
     if (!w) return;
+    const page = $('#detailPage');
+    if (!page) return;
+    const wasOpen = page.classList.contains('open') || page.classList.contains('dt-reveal');
+
     ui.detailId = id;
     ui.heroIndex = 0;
     ui.ratingEditing = false;
     renderDetail();
-    const page = $('#detailPage');
+
+    if (wasOpen) {
+      // 已打开（或正在收起）时换作品：不重播展开，直接落到终态，避免动画打架
+      dtClearTimers();
+      ++dtSeq;
+      page.classList.remove('dt-reveal', 'dt-show-content', 'dt-closing', 'dt-quiet');
+      const c = page.querySelector('.dt-curtain');
+      if (c) { c.style.transition = 'none'; c.style.transform = 'scale(0)'; }
+    }
+
     page.dataset.workId = id;
     page.classList.add('open');
     page.setAttribute('aria-hidden', 'false');
     $('#detailScroll').scrollTop = 0;
+    if (!wasOpen) playDetailReveal(srcEl);
   }
 
   function detailSlide() {
@@ -1184,15 +1669,28 @@
     el.style.height = next + 'px';
   }
 
-  function closeDetail() {
+  function closeDetail(instant) {
     const page = $('#detailPage');
     if (!page) return;
     persistDrafts();
-    page.classList.remove('open');
-    page.setAttribute('aria-hidden', 'true');
+    // 业务状态立刻归零，视觉上的收起动画随后播——中途再点开会被 openDetail 接管
     ui.detailId = null;
     ui.ratingEditing = false;
     lingSyncStatusBar(true);
+    page.setAttribute('aria-hidden', 'true');
+
+    if (!page.classList.contains('open') || page.classList.contains('dt-closing')) return;
+
+    const finish = () => {
+      dtClearTimers();
+      ++dtSeq;
+      dtOrigin = null;
+      page.classList.remove('open', 'dt-reveal', 'dt-show-content', 'dt-closing', 'dt-quiet');
+      const c = page.querySelector('.dt-curtain');
+      if (c) { c.style.transition = 'none'; c.style.transform = 'scale(0)'; }
+    };
+    if (instant || !dtMotionOK()) { finish(); return; }
+    playDetailCollapse(finish);
   }
 
   // ── default artwork ─────────────────────────────────────
@@ -1360,13 +1858,14 @@
 
   // ── screens / nav ───────────────────────────────────────
   function switchTab(name, opts = {}) {
-    if (!['records', 'wishlist', 'reading'].includes(name)) name = 'records';
+    if (!['records', 'wishlist', 'reading', 'review'].includes(name)) name = 'records';
     ui.tab = name;
     $$('.screen').forEach(s => s.classList.toggle('active', s.id === 'screen-' + name));
     $$('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.tab === name));
     if (name === 'records') renderRecords();
     if (name === 'wishlist') renderWishlist();
     if (name === 'reading') renderReading();
+    if (name === 'review') renderReview();
     const screen = $('#screen-' + name);
     if (screen) screen.scrollTop = 0;
     placeNavBlob(!!ui.navReady);
@@ -1378,10 +1877,550 @@
     renderRecords();
     renderWishlist();
     renderReading();
+    if (ui.tab === 'review') renderReview();
+  }
+
+  // ── 阶段5 · 回顾（时间胶囊 + 月度 / 年度） ────────────────
+  // 统计口径：只认记录里真实存在的日期，缺失或非法日期「不参与任何区间统计」，
+  // 既不会补成今天，也不会当成 0。取法：
+  //   已看完 → date || finishedAt；在看 → startedAt；
+  //   想看   → addedAt；想看但已标记 done → finishedAt || addedAt，并计入「完成」
+  // 所有数字都能从 db.works 重新算出来，不缓存、不写新键。
+  const RV_ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
+  const RV_MODES = [
+    { key: 'year', label: '一年前' },
+    { key: 'random', label: '随便翻一条' },
+    { key: 'oldest', label: '最早的记录' }
+  ];
+
+  function rvStatus(w) {
+    if (w.status === 'wish' && w.done) return 'finished';
+    return w.status || '';
+  }
+
+  function rvDate(w) {
+    let raw = '';
+    if (w.status === 'finished') raw = w.date || w.finishedAt;
+    else if (w.status === 'reading') raw = w.startedAt;
+    else if (w.status === 'wish') raw = w.done ? (w.finishedAt || w.addedAt) : w.addedAt;
+    return (typeof raw === 'string' && RV_ISO_RE.test(raw)) ? raw : '';
+  }
+
+  function rvRows() {
+    return db.works
+      .map(w => ({ w, d: rvDate(w) }))
+      .filter(x => !!x.d)
+      .sort((a, b) => b.d.localeCompare(a.d));
+  }
+
+  function rvDaysAgo(iso) {
+    const a = Date.parse(iso + 'T00:00:00');
+    const t = Date.parse(todayISO() + 'T00:00:00');
+    if (!Number.isFinite(a) || !Number.isFinite(t)) return null;
+    return Math.round((t - a) / 86400000);
+  }
+
+  // 「多久以前」只用量出来的天数说，跨月跨年不给精确值，用「约」
+  function rvAgeLabel(iso) {
+    const d = rvDaysAgo(iso);
+    if (d === null || d < 0) return '';
+    if (d === 0) return '今天';
+    if (d < 31) return d + ' 天前';
+    if (d < 365) return '约 ' + Math.floor(d / 30) + ' 个月前';
+    const y = Math.floor(d / 365), rest = d - y * 365;
+    if (rest < 31) return y + ' 年 ' + rest + ' 天前';
+    return '约 ' + y + ' 年 ' + Math.floor(rest / 30) + ' 个月前';
+  }
+
+  function rvShiftMonth(key, delta) {
+    const parts = String(key || '').split('-').map(Number);
+    const d = new Date(parts[0], (parts[1] || 1) - 1 + delta, 1);
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1);
+  }
+  function rvMonthRangeOf(key) {
+    const parts = String(key).split('-').map(Number);
+    const end = new Date(parts[0], parts[1], 0).getDate();
+    return { from: key + '-01', to: key + '-' + pad2(end) };
+  }
+  function rvYearRangeOf(y) { return { from: y + '-01-01', to: y + '-12-31' }; }
+  function rvMonthLabel(key) {
+    const parts = String(key).split('-').map(Number);
+    return parts[0] + ' 年 ' + parts[1] + ' 月';
+  }
+
+  function rvCoverage() {
+    const rows = rvRows();
+    if (!rows.length) return null;
+    const dates = rows.map(x => x.d).sort();
+    return { first: dates[0], last: dates[dates.length - 1], count: rows.length };
+  }
+
+  function rvMonthKey() {
+    const todayKey = todayISO().slice(0, 7);
+    const key = ui.rvMonth || todayKey;
+    return RV_ISO_RE.test(key + '-01') ? key : todayKey;
+  }
+
+  // 翻页边界按真实数据覆盖范围：不会翻到数据之外的空年份/空月份里迷路
+  function rvBounds() {
+    const todayKey = todayISO().slice(0, 7);
+    const cov = rvCoverage();
+    if (!cov) return { min: todayKey, max: todayKey };
+    const a = cov.first.slice(0, 7), b = cov.last.slice(0, 7);
+    return { min: a < todayKey ? a : todayKey, max: b > todayKey ? b : todayKey };
+  }
+
+  function rvRange() {
+    const key = rvMonthKey();
+    if (ui.rvScope === 'year') {
+      const y = Number(String(key).slice(0, 4)) || new Date().getFullYear();
+      const r = rvYearRangeOf(y);
+      return { from: r.from, to: r.to, label: y + ' 年', year: y, key: key };
+    }
+    const r = rvMonthRangeOf(key);
+    return { from: r.from, to: r.to, label: rvMonthLabel(key), year: Number(String(key).slice(0, 4)), key: key };
+  }
+
+  function rvRated(w) {
+    return w.rating !== null && w.rating !== undefined && w.rating !== '' && Number.isFinite(Number(w.rating));
+  }
+
+  function rvCompute(from, to) {
+    const items = rvRows().filter(x => x.d >= from && x.d <= to);
+    const byType = {};
+    const byStatus = { finished: 0, reading: 0, wish: 0 };
+    let ratedCount = 0, sum = 0, lo = null, hi = null;
+    items.forEach(x => {
+      const w = x.w;
+      if (TYPES[w.type]) byType[w.type] = (byType[w.type] || 0) + 1;
+      const st = rvStatus(w);
+      if (byStatus[st] != null) byStatus[st] += 1;
+      if (rvRated(w)) {
+        const r = Number(w.rating);
+        ratedCount += 1;
+        sum += r;
+        if (!lo || r < lo.rating) lo = { rating: r, w: w };
+        if (!hi || r > hi.rating) hi = { rating: r, w: w };
+      }
+    });
+    const typeRows = TYPE_ORDER.filter(t => byType[t]).map(t => ({ t: t, n: byType[t], m: TYPES[t] }));
+    const thoughtCount = items.filter(x => String(x.w.thought || '').trim()).length;
+    // 精选只从「有评分或有感想」的记录里挑：没有评分也没有感想的条目进精选没有信息量
+    const featured = items.filter(x => rvRated(x.w) || String(x.w.thought || '').trim()).sort((a, b) => {
+      const ra = rvRated(a.w) ? Number(a.w.rating) : -1;
+      const rb = rvRated(b.w) ? Number(b.w.rating) : -1;
+      if (rb !== ra) return rb - ra;
+      const ta = String(a.w.thought || '').trim() ? 1 : 0;
+      const tb = String(b.w.thought || '').trim() ? 1 : 0;
+      if (tb !== ta) return tb - ta;
+      return b.d.localeCompare(a.d);
+    }).slice(0, 3);
+    return {
+      items: items, total: items.length, byType: byType, byStatus: byStatus, typeRows: typeRows,
+      ratedCount: ratedCount, avg: ratedCount ? sum / ratedCount : null,
+      lo: lo, hi: hi, featured: featured, thoughtCount: thoughtCount
+    };
+  }
+
+  // ── 时间胶囊 ──
+  function rvOneYearAgoISO() {
+    const base = new Date(todayISO() + 'T00:00:00');
+    if (!(base instanceof Date) || isNaN(base.getTime())) return '';
+    base.setFullYear(base.getFullYear() - 1);
+    return base.getFullYear() + '-' + pad2(base.getMonth() + 1) + '-' + pad2(base.getDate());
+  }
+
+  function rvCapsulePool(mode) {
+    const today = todayISO();
+    // 「旧记录」必须是过去日期的记录，今天的记录不算回忆
+    const rows = rvRows().filter(x => x.d < today);
+    if (mode === 'year') {
+      const target = rvOneYearAgoISO();
+      if (!target) return [];
+      const tn = rvDaysAgo(target);
+      if (tn === null) return [];
+      // 用真实天数差判断，避免闰年 / 月末的字符串比较误差
+      return rows.filter(x => {
+        const n = rvDaysAgo(x.d);
+        return n !== null && Math.abs(n - tn) <= 60;
+      });
+    }
+    if (mode === 'oldest') return rows.slice().sort((a, b) => a.d.localeCompare(b.d)).slice(0, 6);
+    return rows;
+  }
+
+  function rvPick(mode, excludeId) {
+    const pool = rvCapsulePool(mode).filter(x => x.w.id !== excludeId);
+    if (!pool.length) return null;
+    // 「最早的记录」是确定的：就是最早那条；换一条 = 往后再挪一条，不会跳到中途
+    if (mode === 'oldest') return pool[0].w;
+    // 随机模式下，当时写下了感想的先参与抽（胶囊的价值在当时的字），但仍是随机
+    const rich = pool.filter(x => String(x.w.thought || '').trim());
+    const src = rich.length ? rich : pool;
+    return src[Math.floor(Math.random() * src.length)].w;
+  }
+
+  function rvCapsuleEmpty(cov) {
+    let title = '', desc = '', btns = '';
+    if (!cov) {
+      title = '还没有可以回顾的记录';
+      desc = '时间胶囊只从你已经记下的内容里取，不会凭空生成。先记一条，过一阵子再回来。';
+      btns = '<button class="rv-btn primary" data-action="new-work">记一条</button>';
+    } else if (ui.rvMode === 'year') {
+      const n = rvDaysAgo(cov.first);
+      title = '还没有一年前的记录';
+      desc = '最早的一条在 ' + fmtDate(cov.first) + (n !== null ? '，大约 ' + Math.round(n / 30) + ' 个月前' : '') + '，离一年还差一段。';
+      btns = '<button class="rv-btn primary" data-action="rv-mode" data-mode="oldest">看最早的记录</button>';
+    } else if (ui.rvMode === 'oldest') {
+      title = '没有更早的记录';
+      desc = '带日期的记录已经翻到头了。';
+      btns = '<button class="rv-btn" data-action="rv-mode" data-mode="random">随便翻一条</button>';
+    } else {
+      title = '还没有可以翻的旧记录';
+      desc = '带日期的记录都集中在今天，再等几天就有能翻的了。';
+      btns = '<button class="rv-btn" data-action="new-work">记一条</button>';
+    }
+    return '<div class="rv-hero is-empty">' +
+      '<div class="rv-hero-grid" aria-hidden="true"></div>' +
+      '<div class="rv-hero-in">' +
+        '<div class="rv-hero-top"><span class="rv-pill"><i></i>时间胶囊</span></div>' +
+        '<h2 class="rv-hero-title">' + esc(title) + '</h2>' +
+        '<p class="rv-hero-thought is-empty">' + esc(desc) + '</p>' +
+        '<div class="rv-hero-actions">' + btns + '</div>' +
+      '</div></div>';
+  }
+
+  function rvModeLabel() {
+    const hit = RV_MODES.find(m => m.key === ui.rvMode);
+    return hit ? hit.label : '时间胶囊';
+  }
+
+  function renderCapsule() {
+    const host = $('#rvCapsule');
+    if (!host) return;
+    const cov = rvCoverage();
+    const pool = cov ? rvCapsulePool(ui.rvMode) : [];
+    let w = ui.rvPickId ? getWork(ui.rvPickId) : null;
+    if (!w || !pool.some(x => x.w.id === w.id)) {
+      const picked = pool.length ? rvPick(ui.rvMode, null) : null;
+      w = picked || null;
+      ui.rvPickId = w ? w.id : null;
+    }
+    if (!w) { host.innerHTML = rvCapsuleEmpty(cov); return; }
+
+    const d = rvDate(w);
+    const m = TYPES[w.type] || null;
+    const thought = String(w.thought || '').trim();
+    const rated = rvRated(w);
+    const canRoll = rvCapsulePool(ui.rvMode).length > 1;
+    const age = rvAgeLabel(d);
+    const meta = [];
+    if (w.creator) meta.push(w.creator);
+    meta.push(rated ? ratingText(w.rating) + ' / 10' : '未评分');
+
+    host.innerHTML = '<div class="rv-hero">' +
+      '<div class="rv-hero-grid" aria-hidden="true"></div>' +
+      '<div class="rv-hero-glow" aria-hidden="true"></div>' +
+      '<div class="rv-hero-in">' +
+        '<div class="rv-hero-top">' +
+          '<span class="rv-pill"><i></i>时间胶囊 · ' + esc(rvModeLabel()) + '</span>' +
+          '<span class="rv-mono">' + esc(d) + '</span>' +
+        '</div>' +
+        '<div class="rv-hero-main">' +
+          '<div class="rv-hero-text">' +
+            '<h2 class="rv-hero-title">' + esc(w.title) + '</h2>' +
+            '<p class="rv-hero-age">' + esc(age) + (m ? ' · ' + esc(m.full) : '') + '</p>' +
+          '</div>' +
+          '<span class="rv-hero-cover">' + coverHTML(w) + '</span>' +
+        '</div>' +
+        (thought
+          ? '<p class="rv-hero-thought">' + esc(thought) + '</p>'
+          : '<p class="rv-hero-thought is-empty">这条记录里没有写下感想。</p>') +
+        '<div class="rv-hero-foot"><span class="rv-mono">' + esc(meta.join(' · ')) + '</span></div>' +
+        '<div class="rv-hero-actions">' +
+          '<button class="rv-btn primary" data-action="rv-open" data-id="' + w.id + '">打开记录</button>' +
+          '<button class="rv-btn" data-action="rv-edit" data-id="' + w.id + '">编辑</button>' +
+          (canRoll ? '<button class="rv-btn" data-action="rv-roll">换一条</button>' : '') +
+        '</div>' +
+      '</div></div>';
+  }
+
+  function rvRoll() {
+    const prev = ui.rvPickId;
+    const w = rvPick(ui.rvMode, prev);
+    if (!w) { toast(ui.rvMode === 'year' ? '一年前后只有这一条' : '没有更多可以翻的记录'); return; }
+    ui.rvPickId = w.id;
+    renderCapsule();
+  }
+
+  // ── 月度 / 年度 ──
+  function renderModes() {
+    const row = $('#rvModes');
+    if (!row) return;
+    row.innerHTML = RV_MODES.map(m =>
+      '<button class="filter' + (ui.rvMode === m.key ? ' active' : '') + '" data-action="rv-mode" data-mode="' + m.key + '">' + m.label + '</button>'
+    ).join('');
+    RV_BLOB.place(true);
+  }
+
+  function rvStep(delta) {
+    const b = rvBounds();
+    const key = rvMonthKey();
+    if (ui.rvScope === 'year') {
+      const y = Number(String(key).slice(0, 4)) + delta;
+      if (y < Number(String(b.min).slice(0, 4)) || y > Number(String(b.max).slice(0, 4))) return;
+      ui.rvMonth = y + String(key).slice(4);
+    } else {
+      const next = rvShiftMonth(key, delta);
+      if (next < b.min || next > b.max) return;
+      ui.rvMonth = next;
+    }
+    renderMonth();
+  }
+
+  function rvStatCards(s, r) {
+    const typeTotal = s.typeRows.reduce((a, x) => a + x.n, 0);
+    const typeHTML = typeTotal
+      ? s.typeRows.map(x => {
+          const pct = Math.round(x.n / typeTotal * 100);
+          return '<div class="rv-bar">' +
+            '<span class="rv-bar-name"><i style="background:' + x.m.dot + '"></i>' + x.m.label + '</span>' +
+            '<span class="rv-bar-track"><span class="rv-bar-fill" style="width:' + Math.max(4, pct) + '%;background:' + x.m.dot + '"></span></span>' +
+            '<span class="rv-bar-n">' + x.n + '</span>' +
+          '</div>';
+        }).join('')
+      : '<p class="rv-empty-line">这段时间的记录都没有类型字段。</p>';
+
+    // 评分缺失不参与计算，也不显示 0
+    const ratingHTML = s.ratedCount
+      ? '<div class="rv-avg-row">' +
+          '<span class="rv-avg">' + ratingText(Math.round(s.avg * 10) / 10) + '</span>' +
+          '<span class="rv-avg-unit">/ 10 · ' + s.ratedCount + ' 条有评分</span>' +
+        '</div>' +
+        '<p class="rv-note">最低 ' + esc(s.lo.w.title) + ' ' + ratingText(s.lo.rating) + ' · 最高 ' + esc(s.hi.w.title) + ' ' + ratingText(s.hi.rating) + '</p>'
+      : (s.total === 0
+          ? '<p class="rv-empty-line">这段时间还没有记录，评分无从统计。</p>'
+          : '<p class="rv-empty-line">这 ' + s.total + ' 条记录里没有评分。没有评分不等于 0 分，所以不给平均值。</p>');
+
+    return '<div class="rv-cards">' +
+      '<div class="rv-card">' +
+        '<span class="rv-eyebrow">记录</span>' +
+        '<div class="rv-big">' + s.total + '<span class="rv-big-u">条</span></div>' +
+        '<p class="rv-split">完成 ' + s.byStatus.finished + ' · 在看 ' + s.byStatus.reading + ' · 想看 ' + s.byStatus.wish + '</p>' +
+      '</div>' +
+      '<div class="rv-card">' +
+        '<span class="rv-eyebrow">类型分布</span>' + typeHTML +
+        (typeTotal && typeTotal < s.total
+          ? '<p class="rv-note">另有 ' + (s.total - typeTotal) + ' 条没有可识别的类型，未计入分布。</p>'
+          : '') +
+      '</div>' +
+      '<div class="rv-card">' +
+        '<span class="rv-eyebrow">评分</span>' + ratingHTML +
+      '</div>' +
+    '</div>';
+  }
+
+  function rvFeaturedHTML(s) {
+    if (!s.featured.length) {
+      return '<p class="rv-empty-line">' + (s.total === 0
+        ? '这段时间还没有记录。'
+        : '这段时间没有留下评分或感想的记录，所以没有精选。') + '</p>';
+    }
+    return s.featured.map(x => {
+      const w = x.w, m = TYPES[w.type] || null;
+      const q = String(w.thought || '').trim();
+      const meta = (m ? m.full : '未分类') + (rvRated(w) ? ' · ' + ratingText(w.rating) + ' / 10' : ' · 未评分') + ' · ' + fmtShort(x.d);
+      return '<button class="rv-feat" data-action="rv-open" data-id="' + w.id + '">' +
+        coverHTML(w) +
+        '<span class="rv-feat-body">' +
+          '<span class="rv-feat-title">' + esc(w.title) + '</span>' +
+          '<span class="rv-feat-meta">' + esc(meta) + '</span>' +
+          (q ? '<span class="rv-feat-quote">' + esc(q.length > 46 ? q.slice(0, 46) + '…' : q) + '</span>' : '') +
+        '</span>' +
+      '</button>';
+    }).join('');
+  }
+
+  function rvYearStrip(year) {
+    const counts = [];
+    for (let i = 1; i <= 12; i++) {
+      const k = year + '-' + pad2(i);
+      const rr = rvMonthRangeOf(k);
+      counts.push({ k: k, n: rvCompute(rr.from, rr.to).total });
+    }
+    const maxN = counts.reduce((a, c) => Math.max(a, c.n), 0) || 1;
+    return '<div class="rv-strip">' + counts.map(c =>
+      '<button class="rv-strip-cell" data-action="rv-jump-month" data-month="' + c.k + '" aria-label="' + c.k + ' 有 ' + c.n + ' 条">' +
+        '<span class="rv-strip-bar" style="height:' + (c.n ? Math.max(8, Math.round(c.n / maxN * 100)) : 3) + '%"></span>' +
+        '<span class="rv-strip-l">' + Number(c.k.slice(5)) + '</span>' +
+      '</button>'
+    ).join('') + '</div>';
+  }
+
+  function renderMonth() {
+    const host = $('#rvMonth');
+    if (!host) return;
+    const key = rvMonthKey();
+    if (!ui.rvMonth) ui.rvMonth = key;
+    const r = rvRange();
+    const s = rvCompute(r.from, r.to);
+    const b = rvBounds();
+    const prevOK = ui.rvScope === 'year'
+      ? (r.year - 1) >= Number(String(b.min).slice(0, 4))
+      : rvShiftMonth(key, -1) >= b.min;
+    const nextOK = ui.rvScope === 'year'
+      ? (r.year + 1) <= Number(String(b.max).slice(0, 4))
+      : rvShiftMonth(key, 1) <= b.max;
+
+    const emptyLine = s.total === 0
+      ? '<div class="rv-card rv-card-empty"><p class="rv-empty-line">' + (ui.rvScope === 'year' ? '这一年' : '这个月') +
+        '还没有记录。上面的数字都来自真实日期，没有记录就是 0 条。</p></div>'
+      : '';
+
+    host.innerHTML =
+      '<div class="rv-month-head">' +
+        '<div class="rv-month-nav">' +
+          '<button class="rv-nav-btn" data-action="rv-prev" aria-label="上一个"' + (prevOK ? '' : ' disabled') + '><svg class="icon"><use href="#i-back"/></svg></button>' +
+          '<span class="rv-month-label">' + esc(r.label) + '</span>' +
+          '<button class="rv-nav-btn" data-action="rv-next" aria-label="下一个"' + (nextOK ? '' : ' disabled') + '><svg class="icon"><use href="#i-arrow-right"/></svg></button>' +
+        '</div>' +
+        '<div class="rv-scope">' +
+          '<button class="rv-scope-btn' + (ui.rvScope === 'month' ? ' on' : '') + '" data-action="rv-scope" data-scope="month">月度</button>' +
+          '<button class="rv-scope-btn' + (ui.rvScope === 'year' ? ' on' : '') + '" data-action="rv-scope" data-scope="year">年度</button>' +
+        '</div>' +
+      '</div>' +
+      (ui.rvScope === 'year' ? rvYearStrip(r.year) : '') +
+      emptyLine +
+      rvStatCards(s, r) +
+      '<div class="rv-block">' +
+        '<span class="rv-eyebrow">精选 · 按评分与感想排序</span>' +
+        rvFeaturedHTML(s) +
+      '</div>' +
+      '<p class="rv-caliber">口径：已看完了取 date / finishedAt，在看看 startedAt，想看看 finishedAt 或 addedAt；' +
+        '只统计日期落在 <b>' + r.from + '</b> 至 <b>' + r.to + '</b> 的记录，缺日期的记录不计入，也不按 0 处理。' +
+        '评分均值只算有评分的 ' + s.ratedCount + ' 条。</p>' +
+      '<button class="rv-share-btn" data-action="rv-share"><svg class="icon"><use href="#i-spark"/></svg>分享这段回顾</button>';
+  }
+
+  function renderReview() {
+    const cov = rvCoverage();
+    const sub = $('#reviewSub');
+    if (sub) {
+      sub.innerHTML = cov
+        ? '<span>' + fmtShort(cov.first) + ' — ' + fmtShort(cov.last) + '</span><span class="dot-sep"></span><span>' + cov.count + ' 条带日期的记录</span>'
+        : '<span>还没有带日期的记录</span>';
+    }
+    renderModes();
+    renderCapsule();
+    renderMonth();
+  }
+
+  // ── 分享：只发用户勾选的部分，默认不含标题与感想 ──
+  function rvShareData() {
+    const r = rvRange();
+    return { r: r, s: rvCompute(r.from, r.to) };
+  }
+
+  function rvShareText() {
+    const d = rvShareData();
+    const r = d.r, s = d.s;
+    const lines = [r.label + ' · 回顾'];
+    if (ui.shareParts.count) {
+      lines.push('记录 ' + s.total + ' 条（完成 ' + s.byStatus.finished + ' · 在看 ' + s.byStatus.reading + ' · 想看 ' + s.byStatus.wish + '）');
+    }
+    if (ui.shareParts.types && s.typeRows.length) {
+      lines.push('类型：' + s.typeRows.map(x => x.m.label + ' ' + x.n).join(' · '));
+    }
+    if (ui.shareParts.rating) {
+      lines.push(s.ratedCount
+        ? '评分：平均 ' + ratingText(Math.round(s.avg * 10) / 10) + ' / 10（' + s.ratedCount + ' 条有评分）'
+        : '评分：这段时间没有评分记录');
+    }
+    if (ui.shareParts.titles && s.featured.length) {
+      lines.push('精选：');
+      s.featured.forEach(x => lines.push('· ' + x.w.title + (rvRated(x.w) ? ' ' + ratingText(x.w.rating) : '')));
+    }
+    if (ui.shareParts.thoughts) {
+      const q = s.featured.filter(x => String(x.w.thought || '').trim());
+      if (q.length) {
+        lines.push('感想：');
+        q.forEach(x => {
+          const t = String(x.w.thought).trim();
+          lines.push('· ' + (t.length > 52 ? t.slice(0, 52) + '…' : t));
+        });
+      }
+    }
+    lines.push('— 铃 · 私人记录');
+    return lines.join('\n');
+  }
+
+  function renderShareSheet() {
+    const host = $('#shareContent');
+    if (!host) return;
+    const d = rvShareData();
+    const s = d.s;
+    const parts = [
+      ['count', '记录数量与状态', s.total + ' 条'],
+      ['types', '类型分布', s.typeRows.length ? s.typeRows.map(x => x.m.label + ' ' + x.n).join(' · ') : '没有类型数据'],
+      ['rating', '评分统计', s.ratedCount ? '平均 ' + ratingText(Math.round(s.avg * 10) / 10) + ' · ' + s.ratedCount + ' 条有评分' : '这段时间没有评分'],
+      ['titles', '精选作品标题', s.featured.length ? s.featured.map(x => x.w.title).join(' · ') : '没有可精选的记录'],
+      ['thoughts', '感想原文（私人）', s.thoughtCount ? s.thoughtCount + ' 条有感想' : '这段时间没有感想']
+    ];
+    host.innerHTML =
+      '<div class="sheet-head">' +
+        '<h2>分享这段回顾</h2>' +
+        '<button class="sheet-close" data-close="share" aria-label="关闭"><svg class="icon"><use href="#i-close"/></svg></button>' +
+      '</div>' +
+      '<p class="rv-share-note">只有勾选的内容会进入分享文案。默认只发数字，作品标题和感想原文要你自己打开。</p>' +
+      '<div class="rv-share-list">' +
+        parts.map(p =>
+          '<button class="rv-share-row' + (ui.shareParts[p[0]] ? ' on' : '') + '" data-action="rv-share-toggle" data-part="' + p[0] + '">' +
+            '<span class="rv-share-box" aria-hidden="true"></span>' +
+            '<span class="rv-share-txt"><b>' + p[1] + '</b><small>' + esc(p[2]) + '</small></span>' +
+          '</button>'
+        ).join('') +
+      '</div>' +
+      '<pre class="rv-share-preview">' + esc(rvShareText()) + '</pre>' +
+      '<button class="primary-btn" data-action="rv-share-copy">复制分享文案<svg class="icon"><use href="#i-arrow-up"/></svg></button>';
+  }
+
+  async function rvCopyShare() {
+    const text = rvShareText();
+    if (!ui.shareParts.count && !ui.shareParts.types && !ui.shareParts.rating && !ui.shareParts.titles && !ui.shareParts.thoughts) {
+      toast('先选一项要分享的内容');
+      return;
+    }
+    let ok = false;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        ok = true;
+      }
+    } catch (e) { ok = false; }
+    if (!ok) {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.cssText = 'position:fixed;top:-999px;left:0;opacity:0';
+        document.body.appendChild(ta);
+        ta.select();
+        ok = document.execCommand('copy');
+        ta.remove();
+      } catch (e) { ok = false; }
+    }
+    toast(ok ? '分享文案已复制' : '复制失败，可长按预览手动复制', ok ? 'ok' : 'err');
   }
 
   // ── add / edit form ─────────────────────────────────────
-  function openAdd(status = 'finished', editId = null, forceStatus = false) {
+  // 从「新建」页里选完选项进来的表单，是「叠在新建页上的抽屉」：
+  // 新建页留在下面不收，表单直接从底部推上来；返回时抽屉收回底部、新建页还在原处，
+  // 保存成功才把整条新建流程一起收掉。qaHold 就是这个「新建页被留在下面」的状态。
+  let qaHold = false;
+  let addCloseT = 0;
+  const ADD_CLOSE_MS = 280;
+
+  function openAdd(status = 'finished', editId = null, forceStatus = false, fromQa = false) {
     const work = editId ? getWork(editId) : null;
     if (editId && !work) return;
     ui.editingId = editId || null;
@@ -1401,24 +2440,51 @@
     $('#formTag').value = work && work.tag ? work.tag : '';
     $('#formWhy').value = work ? (work.why || '') : '';
     $('#formInitialNote').value = '';
+    ui.ratingTouched = false;   // 新开一次表单 = 评分还没被真正动过
 
     syncRating();
     syncTypeButtons();
     syncStatusButtons();
     renderFormIcon();
     renderTagChips();
-    $('#addPage').classList.add('open');
-    $('#addPage').setAttribute('aria-hidden', 'false');
+    const page = $('#addPage');
+    clearTimeout(addCloseT);
+    qaHold = !!fromQa;
+    page.classList.toggle('qa-sheet', !!fromQa);
+    page.classList.remove('closing');
+    page.classList.add('open');
+    page.setAttribute('aria-hidden', 'false');
     $('#addPage .page-body').scrollTop = 0;
     requestAnimationFrame(() => placeStatusBlob(true)); // v2.0.2：表单显示后立即定位指示块
   }
 
-  function closeAdd() {
-    $('#addPage').classList.remove('open');
-    $('#addPage').setAttribute('aria-hidden', 'true');
+  function closeAdd(instant) {
+    const page = $('#addPage');
+    if (!page) return;
+    // 这个函数有一处被 addEventListener 直传（#cancelAdd），那时第一个参数是事件对象，
+    // 不能当布尔用 —— 只认严格的 true。
+    const hard = instant === true;
+    const sheet = page.classList.contains('qa-sheet');
+    const hold = qaHold;
     ui.editingId = null;
     ui.iconEditTarget = null;
     ui.formIcon = null;
+    qaHold = false;
+    clearTimeout(addCloseT);
+
+    const finish = () => {
+      page.classList.remove('open', 'closing', 'qa-sheet');
+      page.setAttribute('aria-hidden', 'true');
+    };
+
+    if (hard || !sheet || prefersReduced()) {
+      finish();
+      if (hard && hold) qaHardClose();   // 保存成功：底下的新建页也一起收，别停在中转页
+      return;
+    }
+    // 抽屉收回底部。新建页从头到尾没被收起，所以收完自然就回到它。
+    page.classList.add('closing');
+    addCloseT = setTimeout(finish, ADD_CLOSE_MS + 40);
   }
 
   function syncStatusButtons() {
@@ -1428,6 +2494,10 @@
     $('#wishFields').hidden = ui.formStatus !== 'wish';
     const label = ui.editingId ? '保存修改' : ui.formStatus === 'wish' ? '加入想看' : ui.formStatus === 'reading' ? '开始记录' : '保存记录';
     $('#saveWorkLabel').textContent = label;
+    // 快速记录只对「新建 + 已看完」有意义：在看/想看本来就没有必填的分数，
+    // 编辑已有作品时也不该走「先存下」这条会重写字段的路径。
+    const quick = $('#saveQuick');
+    if (quick) quick.hidden = !!ui.editingId || ui.formStatus !== 'finished';
     if (!ui.editingId) {
       $('#addPageTitle').textContent = ui.formStatus === 'wish' ? '新的想看' : ui.formStatus === 'reading' ? '开始在看' : '新记录';
     }
@@ -1485,7 +2555,11 @@
     $('#tagOptions').innerHTML = tags.map(tag => `<option value="${esc(tag)}"></option>`).join('');
   }
 
-  function saveWork() {
+  // quick === true 时是「先存下」：不写没被真正动过的默认 8.5 分，
+  // 其余字段照填什么存什么（这样不会把用户已经写下的内容丢掉）。
+  // 注意 #saveWork 是 addEventListener 直传，那时 quick 是事件对象 —— 只认严格 true。
+  function saveWork(quick) {
+    const fast = quick === true;
     const title = $('#formTitle').value.trim();
     if (!title) { toast('先写下作品名称'); $('#formTitle').focus(); return; }
     const status = ui.formStatus;
@@ -1515,7 +2589,9 @@
     }
 
     if (status === 'finished') {
-      w.rating = Number($('#formRating').value);
+      // 「先存下」且没动过滑杆 → 不写分数（rating=null 表示还没打，不是 0 分）
+      const keepRating = fast && !ui.ratingTouched && !old;
+      w.rating = keepRating ? null : Number($('#formRating').value);
       w.date = $('#formDate').value || todayISO();
       w.finishedAt = w.date;
       const thought = $('#formThought').value.trim();
@@ -1541,7 +2617,7 @@
 
     if (!saveDB()) return;
     const wasNew = !old;
-    closeAdd();
+    closeAdd(true);   // 保存成功 = 整条新建流程结束：抽屉与底下的新建页一起收
     renderAll();
     if (ui.detailId) renderDetail();
     if (wasNew) {
@@ -1549,7 +2625,10 @@
     } else if (ui.detailId) {
       renderDetail();
     }
-    toast(wasNew ? (status === 'wish' ? '已加入想看' : status === 'reading' ? '已开始记录' : '已保存') : '已保存修改');
+    toast(wasNew
+      ? (status === 'wish' ? '已加入想看' : status === 'reading' ? '已开始记录'
+        : fast ? '已存下 · 评分和感想可以之后补' : '已保存')
+      : '已保存修改');
   }
 
   // ── wish / reading actions ──────────────────────────────
@@ -2248,17 +3327,35 @@
   }
 
   // ── sheet utilities ─────────────────────────────────────
+  // 弹层开/关统一走这里：进入用 CSS 动画，退出补一段 180ms 的反向动画。
+  // seq 令牌保证「关闭动画未播完又被打开」时不会把新弹层关掉。
+  let sheetSeq = 0;
   function openSheet(id) {
     const el = document.getElementById(id);
     if (!el) return;
+    const wasOpen = el.classList.contains('open');
+    el.dataset.seq = String(++sheetSeq);
+    el.classList.remove('closing');
+    if (wasOpen) {
+      // 内容已被替换时重播进入动画（同名 class 重复添加不会重启 CSS animation）
+      el.classList.remove('open');
+      void el.offsetWidth;
+    }
     el.classList.add('open');
     el.setAttribute('aria-hidden', 'false');
   }
   function closeSheet(id) {
     const el = document.getElementById(id);
-    if (!el) return;
-    el.classList.remove('open');
+    if (!el || !el.classList.contains('open') || el.classList.contains('closing')) return;
     el.setAttribute('aria-hidden', 'true');
+    if (!dragMotionOK()) { el.classList.remove('open', 'closing'); return; }
+    const seq = String(++sheetSeq);
+    el.dataset.seq = seq;
+    el.classList.add('closing');
+    setTimeout(() => {
+      if (el.dataset.seq !== seq) return;
+      el.classList.remove('open', 'closing');
+    }, 180);
   }
   function closeAllSheets() {
     closeSheet('noteSheet');
@@ -2274,11 +3371,37 @@
     if (preview) preview.innerHTML = '';
   }
 
-  // ── v1.9.0 · 卡片整理：长按拖动（统一状态 / 渐变区+胶囊 / 自动滚动 / 指针双端） ──
-  const SORT_GAP = 8; // .record-list 的 gap
-  const AUTO_SCROLL_EDGE = 88; // 距屏幕边缘多近开始自动滚动
+  // ══════════════════════════════════════════════════════════════════
+  // 阶段2 · 卡片整理模式：单一状态机（长按浮起 → 拖动排序 / 置顶 / 删除）
+  //
+  // 设计原则：
+  //   1. 只有一个可变状态对象 DRAG。置顶、排序、删除都从它读几何，
+  //      不再各自维护 index / target / zone（v1.9 曾是三份互相打架的状态）。
+  //   2. 数据只有一个真源：work.sortNo。拖动落位后由 commitListOrder()
+  //      一次性重算全部 sortNo 并走 saveDB()，不做局部修补。
+  //   3. 所有动画只碰 transform / opacity；几何在拖动开始时缓存一次，
+  //      移动过程中不读布局（避免每帧强制重排）。
+  //   4. 落位用 ghost 补间到目标槽位，落定后再重排 DOM —— 视觉上无跳变，
+  //      因此不需要 FLIP，也不需要给整页做 transition。
+  // ══════════════════════════════════════════════════════════════════
+  const SORT_GAP = 8;             // .record-list 的 gap
+  const AUTO_SCROLL_EDGE = 96;    // 距视口边缘多近开始自动滚动
+  const AUTO_SCROLL_MAX = 15;     // 自动滚动最大速度（px/帧）
+  const AUTO_SCROLL_RAMP = 260;   // 从 0.55× 起步、260ms 内加到 1×
+  const LP_MS = 340;              // 长按判定时长
+  const LP_SLOP = 10;             // 长按期间允许的位移
+  // 浮起倍率 1.03 写在 CSS（.drag-ghost.lift > .record）：
+  // 位移交给外层内联 transform，缩放交给内层过渡，两者不抢同一个属性。
+  const SETTLE_MS = 220;          // 松手落位时长
+  const SWAP_HYST = 6;            // 换位迟滞（px）：临界点附近不来回抖
+
   let DRAG = null;
+  let dragLock = 0;               // 落位动画期间锁住，避免第二次长按打断动画
   let lpTimer = null, lpCard = null, lpPoint = null;
+
+  function dragMotionOK() {
+    try { return !matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return true; }
+  }
 
   function ensureDragZones() {
     if (!$('#dragZoneTop')) {
@@ -2297,20 +3420,67 @@
     }
   }
 
-  // 统一入口：进入整理状态（ghost 浮起 + 列表进入 organizing）
+  // 参与排序的卡片（筛选态下被 hidden 的卡不参与换位计算）
+  function dragCards() {
+    return $$('#recordList .record').filter(el => !el.hidden);
+  }
+
+  // 进入整理：只做「建立状态 + 几何快照 + 浮起」，不含任何数据变更
   function beginOrganize(card, clientY) {
-    if (DRAG || !card) return;
+    if (DRAG || dragLock || !card) return;
     const w = getWork(card.dataset.id);
     if (!w) return;
-    const all = $$('#recordList .record');
+
+    const cards = dragCards();
+    const origIndex = cards.indexOf(card);
+    if (origIndex < 0) return;
+
+    const sc = document.querySelector('.screen.active');
     const rect = card.getBoundingClientRect();
-    // 浮起的 ghost：fixed 定位，不受滚动容器裁剪
-    const ghost = card.cloneNode(true);
-    ghost.classList.add('drag-ghost', 'lift');
+
+    // 几何快照（滚动内容坐标系）。拖动全程不再读布局。
+    // 卡片高度并不一致（感想一行/两行、有无评分），所以不能用「统一 step」推位置——
+    // 那样拖一张高卡越过矮卡时会算错，孔洞与 ghost 对不上。
+    // 这里记下每张卡的顶边与真实高度，换位时按真实高度累加。
+    const scTop = sc ? sc.getBoundingClientRect().top : 0;
+    const baseScroll = sc ? sc.scrollTop : 0;
+    const rects = cards.map(el => {
+      const r = el.getBoundingClientRect();
+      return { top: r.top - scTop + baseScroll, h: r.height };
+    });
+    const tops = rects.map(r => r.top);
+    const listTop = tops[0];
+
+    // 「抽走被拖卡之后」的槽位累计表（相对 listTop）：
+    // pref[k] = 第 k 个槽位的顶边，k ∈ [0, 卡数-1]，正好等于目标下标 t 的取值范围。
+    const oTops = [], oHeights = [];
+    cards.forEach((el, i) => {
+      if (i === origIndex) return;
+      oTops.push(rects[i].top);
+      oHeights.push(rects[i].h);
+    });
+    const pref = [0];
+    oHeights.forEach(h => pref.push(pref[pref.length - 1] + h + SORT_GAP));
+
+    // 浮起的 ghost 分两层：外层 fixed 只负责「跟随指针的 translateY」，
+    // 内层克隆卡只负责「浮起的 scale」。合成属性拆开写，缩放才能走 180ms 缓动
+    // 而不是长按那一刻硬跳到 1.03；也避免 WAAPI 与内联 transform 互相覆盖
+    //（v2.3.0 的教训：fill:forwards 的动画会顶掉每帧写的 translateY）。
+    const ghost = document.createElement('div');
+    ghost.className = 'drag-ghost';
     ghost.style.width = rect.width + 'px';
     ghost.style.left = rect.left + 'px';
     ghost.style.top = rect.top + 'px';
+    ghost.style.transform = 'translateY(0)';
+    const ghostCard = card.cloneNode(true);
+    ghostCard.classList.remove('drag-placeholder');
+    ghostCard.removeAttribute('tabindex');
+    ghost.appendChild(ghostCard);
     document.body.appendChild(ghost);
+    // 用 setTimeout 而不是 rAF：rAF 在切后台/合成器回收时会被挂起，
+    // 而「浮起」是状态的一部分，不能依赖一帧是否被调度。
+    if (dragMotionOK()) setTimeout(() => ghost.classList.add('lift'), 16);
+
     card.classList.add('drag-placeholder');
     $('#recordList').classList.add('organizing');
     document.body.classList.add('drag-active');
@@ -2320,84 +3490,341 @@
     buzzer(15);
     ui.longPressFired = true;
 
-    const sc0 = document.querySelector('.screen.active');
+    const zt = $('#dragZoneTop'), zb = $('#dragZoneBottom');
+    const ctr = zt && zt.querySelector('.drag-chip');
+    const cbr = zb && zb.querySelector('.drag-chip');
+    // 顶部胶囊按「手里这张是不是置顶卡」切换语义：置顶卡拖回顶部 = 取消置顶
+    if (ctr) {
+      const label = ctr.querySelector('span');
+      if (label) label.textContent = w.pinnedAt ? '松手取消置顶' : '松手置顶';
+      ctr.classList.toggle('drag-chip-unpin', !!w.pinnedAt);
+    }
+
     DRAG = {
-      card, ghost, w, cards: all,
+      card, ghost, w, cards, tops, listTop,
+      holeTop0: tops[origIndex] - listTop,   // 被拖卡原始顶边（相对列表顶）
+      oTops, oHeights, pref,
       startY: clientY, lastY: clientY,
+      baseTop: rect.top,
       h: rect.height,
-      step: rect.height + SORT_GAP,
-      baseScroll: sc0 ? sc0.scrollTop : 0,
-      origIndex: all.indexOf(card),
-      target: all.indexOf(card),
-      n: all.length - 1,
-      zone: null, dir: 0, raf: 0
+      sc, baseScroll,
+      origIndex,
+      target: origIndex,
+      n: cards.length - 1,
+      zone: null, dir: 0, dirSign: 0, dirSince: 0, raf: 0,
+      // 胶囊判定用的一次性测量（避免每帧 getBoundingClientRect）
+      zoneTopEdge: ctr ? ctr.getBoundingClientRect().bottom + 14 : 0,
+      zoneBottomEdge: cbr ? cbr.getBoundingClientRect().top - 14 : Infinity
     };
     DRAG.raf = requestAnimationFrame(autoScrollStep);
   }
 
-  // 边缘自动滚动：越贴近边缘越快；滚动期间持续刷新让位目标
-  function autoScrollStep() {
+  // 边缘自动滚动：越贴近边缘越快；按住不动时缓慢加速，出区/松手立即停
+  function autoScrollStep(now) {
     if (!DRAG) return;
-    if (DRAG.dir) {
-      const sc = document.querySelector('.screen.active');
-      if (sc) sc.scrollTop += DRAG.dir;
-      moveDrag(DRAG.lastY);
+    const d = DRAG;
+    if (d.dir && d.sc) {
+      const ramp = Math.min(1, Math.max(0, (now - (d.dirSince || now)) / AUTO_SCROLL_RAMP));
+      const before = d.sc.scrollTop;
+      d.sc.scrollTop = before + d.dir * (0.55 + 0.45 * ramp);
+      if (d.sc.scrollTop === before) d.dir = 0;       // 已到顶/底
+      else moveDrag(d.lastY);                         // 滚动改变了孔洞目标
     }
-    DRAG.raf = requestAnimationFrame(autoScrollStep);
+    if (DRAG) DRAG.raf = requestAnimationFrame(autoScrollStep);
   }
 
   function moveDrag(clientY) {
     if (!DRAG) return;
-    DRAG.lastY = clientY;
-    const dy = clientY - DRAG.startY;
-    DRAG.ghost.style.transform = `translateY(${dy}px) scale(1.03)`;
+    const d = DRAG;
+    d.lastY = clientY;
+    const dy = clientY - d.startY;
+    d.ghost.style.transform = 'translateY(' + dy + 'px)';
 
-    // 边缘自动滚动速度（px/帧，距离成比例）
+    // 顶部置顶区 / 底部删除区（用进拖时量好的边，移动中不读布局）
+    const zone = clientY < d.zoneTopEdge ? 'top' : (clientY > d.zoneBottomEdge ? 'bottom' : null);
+
+    // 自动滚动只在「非功能区」时生效：落在置顶/删除区里还继续滚，
+    // 孔洞却已回原位，看起来像列表自己在抽搐。
     const vh = window.innerHeight;
     let dir = 0;
-    if (clientY < AUTO_SCROLL_EDGE) dir = -Math.max(1, Math.round((1 - clientY / AUTO_SCROLL_EDGE) * 14));
-    else if (clientY > vh - AUTO_SCROLL_EDGE) dir = Math.max(1, Math.round((1 - (vh - clientY) / AUTO_SCROLL_EDGE) * 14));
-    DRAG.dir = dir;
+    if (!zone) {
+      if (clientY < AUTO_SCROLL_EDGE) dir = -Math.round((1 - clientY / AUTO_SCROLL_EDGE) * AUTO_SCROLL_MAX);
+      else if (clientY > vh - AUTO_SCROLL_EDGE) dir = Math.round((1 - (vh - clientY) / AUTO_SCROLL_EDGE) * AUTO_SCROLL_MAX);
+      if (dir && Math.abs(dir) < 2) dir = dir > 0 ? 2 : -2;
+    }
+    const sign = dir > 0 ? 1 : (dir < 0 ? -1 : 0);
+    if (sign !== d.dirSign) { d.dirSign = sign; d.dirSince = performance.now(); }
+    d.dir = dir;
 
-    // 顶部/底部胶囊判定（判定目标=胶囊本体，外扩 14px）
-    const zt = $('#dragZoneTop'), zb = $('#dragZoneBottom');
-    const ct = zt && zt.querySelector('.drag-chip');
-    const cb = zb && zb.querySelector('.drag-chip');
-    const rt = ct && ct.getBoundingClientRect();
-    const rb = cb && cb.getBoundingClientRect();
-    const inTop = !!(rt && clientY < rt.bottom + 14);
-    const inBottom = !!(rb && clientY > rb.top - 14);
-    DRAG.zone = inTop ? 'top' : (inBottom ? 'bottom' : null);
-    if (zt) zt.classList.toggle('active', DRAG.zone === 'top');
-    if (zb) zb.classList.toggle('active', DRAG.zone === 'bottom');
-    DRAG.ghost.style.opacity = DRAG.zone ? '.55' : '.97';
+    if (zone !== d.zone) {
+      d.zone = zone;
+      const zt = $('#dragZoneTop'), zb = $('#dragZoneBottom');
+      if (zt) zt.classList.toggle('active', zone === 'top');
+      if (zb) zb.classList.toggle('active', zone === 'bottom');
+      d.ghost.classList.toggle('zone-hover', !!zone);
+      if (zone) {
+        // 进入功能区即视为取消本次排序：孔洞回原位，避免松手后列表顺序莫名变化
+        d.target = d.origIndex;
+        applyShifts();
+      }
+      buzzer(6);
+    }
+    if (zone) return;
 
-    // v1.9.1 · 孔洞跟随：原位留白，空位随落点移动，随时让位
-    // 判定：拖动作品越过待让位卡高度一半即换位（ghost 中心越过邻卡边缘 + 6px 迟滞）
-    const sc = document.querySelector('.screen.active');
-    const off = sc ? sc.scrollTop - DRAG.baseScroll : 0;
-    const gC = dy + off + DRAG.h / 2; // ghost 中心（列表坐标，相对原位顶部）
-    const M = 6;
-    let t = DRAG.target;
-    while (t < DRAG.n && gC > (t + 1 - DRAG.origIndex) * DRAG.step + M) t++;
-    while (t > 0 && gC < (t - 1 - DRAG.origIndex) * DRAG.step + DRAG.h - M) t--;
-    if (t !== DRAG.target) {
-      DRAG.target = t;
+    // 孔洞跟随：以「槽位中点」为界——被拖卡盖过邻卡一半就换位，超过一半立即让位。
+    // 判据取两槽位顶边的中点（= 邻卡高度 + gap 的一半），不是「越过邻卡整条底边」；
+    // 后者要拖满一整张卡的高度才换，手感像卡住了。等高度时这就是「中心交错」。
+    // 迟滞 ±SWAP_HYST 保证临界点附近不来回抖。
+    const off = d.sc ? d.sc.scrollTop - d.baseScroll : 0;
+    const yRel = d.holeTop0 + dy + off;
+    const M = SWAP_HYST;
+    let t = d.target;
+    while (t < d.n && yRel > (d.pref[t] + d.pref[t + 1]) / 2 + M) t++;
+    while (t > 0 && yRel < (d.pref[t] + d.pref[t - 1]) / 2 - M) t--;
+
+    // v2.4.3：拖动时不再有「置顶区块」这条硬边界。
+    // 置顶只回答「新作品加进来时它是不是要在最上面」，拖动是用户亲手排，
+    // 置顶卡同样是正常让位目标；把它挤下去以后由 reconcilePins() 摘掉置顶标记。
+
+    if (t !== d.target) {
+      d.target = t;
       applyShifts();
     }
   }
 
-  // 空位（原卡隐形态）移动到目标槽位，途径卡片依次让出/补位，互不重叠
+  // 孔洞（原卡隐形态）移到目标槽位，途经卡片依次让位，互不重叠。
+  // 位移按「真实高度 + gap」算：被抽走的卡占位 (h + gap)，跨过它的卡平移正好这么多；
+  // 被拖卡自己的位移 = 中间所有卡的真实高度之和，不是「卡数 × 自己的高度」。
   function applyShifts() {
-    const t = DRAG.target, o = DRAG.origIndex;
-    DRAG.card.style.transform = t !== o ? `translateY(${(t - o) * DRAG.step}px)` : '';
-    DRAG.cards.forEach((c, i) => {
-      if (c === DRAG.card) return;
-      let s = 0;
-      if (t > o && i > o && i <= t) s = -1;
-      else if (t < o && i >= t && i < o) s = 1;
-      c.style.transform = s ? `translateY(${s * DRAG.step}px)` : '';
+    const d = DRAG;
+    if (!d) return;
+    const t = d.target;
+    d.card.style.transform = t === d.origIndex ? '' : 'translateY(' + (d.pref[t] - d.holeTop0) + 'px)';
+    const hGap = d.h + SORT_GAP;
+    d.cards.forEach((c, i) => {
+      if (c === d.card) return;
+      const j = i > d.origIndex ? i - 1 : i;      // 在「抽走被拖卡」序列里的下标
+      const fin = j < t ? j : j + 1;              // 落位后的下标
+      const oldRel = d.oTops[j] - d.listTop;
+      const newRel = fin <= t ? d.pref[fin] : d.pref[fin - 1] + hGap;
+      const delta = newRel - oldRel;
+      c.style.transform = Math.abs(delta) < 0.5 ? '' : 'translateY(' + delta + 'px)';
     });
+  }
+
+  // 落位：ghost 补间到孔洞现在所在的位置，与重排后的 DOM 位置严格重合
+  function settleGhost(d, done) {
+    const ghost = d.ghost;
+    if (!dragMotionOK()) { done(); return; }
+    const fromTop = ghost.getBoundingClientRect().top;
+    const toTop = d.card.getBoundingClientRect().top;
+    let anim;
+    try {
+      anim = ghost.animate(
+        [{ transform: 'translateY(' + (fromTop - d.baseTop) + 'px)' },
+         { transform: 'translateY(' + (toTop - d.baseTop) + 'px)' }],
+        { duration: SETTLE_MS, easing: 'cubic-bezier(.22,.9,.26,1)' }
+      );
+    } catch (e) { done(); return; }
+    // 缩放在内层由 CSS 过渡负责：撤掉 lift，卡片一边落位一边缩回 1
+    ghost.classList.remove('lift');
+    let settled = false;
+    let guard = 0;
+    const fin = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(guard);
+      done();
+    };
+    anim.onfinish = fin;
+    anim.oncancel = fin;
+    // 兜底：动画被系统打断（后台、合成器回收）时也必须落位，不能把状态卡住
+    guard = setTimeout(fin, SETTLE_MS + 140);
+  }
+
+  // 结束整理。commit=false 时只还原，不写任何数据（pointercancel / 失焦 / 中断）
+  function endDrag(commit) {
+    if (!DRAG) return;
+    const d = DRAG;
+    DRAG = null;
+    cancelAnimationFrame(d.raf);
+    document.body.classList.remove('drag-active');
+
+    const zt = $('#dragZoneTop'), zb = $('#dragZoneBottom');
+    if (zt) zt.classList.remove('show', 'active');
+    if (zb) zb.classList.remove('show', 'active');
+    d.ghost.classList.remove('zone-hover');
+
+    const listEl = $('#recordList');
+    if (listEl) listEl.classList.remove('organizing');
+
+    const zone = commit ? d.zone : null;
+    const moved = commit && !zone && d.target !== d.origIndex;
+
+    dragLock++;
+    const resetAll = () => { d.cards.forEach(c => { c.style.transform = ''; }); };
+
+    const finish = () => {
+      d.ghost.remove();
+      d.card.classList.remove('drag-placeholder');   // 长按后原地松手也必须还原可见
+      dragLock--;
+
+      // 中止 / 置顶 / 删除都不该留下换位位移
+      if (!commit) { resetAll(); return; }
+
+      // 顶部区是「置顶开关」：没置顶的置顶，已置顶的取消（v2.4.3）
+      if (zone === 'top') { resetAll(); pinWork(d.w); return; }
+      if (zone === 'bottom') { resetAll(); deleteWorkRequest(d.w); return; }
+      if (moved) {
+        const ids = d.cards.map(c => c.dataset.id);
+        const seq = ids.slice();
+        const [movedId] = seq.splice(d.origIndex, 1);
+        seq.splice(d.target, 0, movedId);
+        // 先按落位后的序列摘掉被挤下去的置顶标记，再一次性写 sortNo 落盘
+        const off = reconcilePins(seq);
+        commitListOrder(ids, d.origIndex, d.target);
+        renderRecords();
+        toast(off === 0 ? '顺序已保存'
+          : off === 1 ? '顺序已保存 · 已取消置顶'
+          : '顺序已保存 · ' + off + ' 项取消置顶', 'ok');
+        return;
+      }
+      resetAll();
+    };
+
+    // 松手时整理态先退场（其余卡片回到满不透明），ghost 继续补间落位
+    settleGhost(d, finish);
+  }
+
+  // ── 数据层：排序的唯一写入口 ─────────────────────────────
+  // ids 是「当前展示顺序」的完整 id 序列；统一重算 sortNo 后一次落盘。
+  function applyOrder(ids) {
+    let i = 0;
+    ids.forEach(id => { const w = getWork(id); if (w) w.sortNo = i++; });
+    return saveDB();
+  }
+
+  // 只重排「当前可见」的那一段，不可见（筛选掉）的作品保持原相对位置
+  function commitListOrder(visibleIds, from, to) {
+    const seq = visibleIds.slice();
+    const [moved] = seq.splice(from, 1);
+    seq.splice(to, 0, moved);
+    const pick = new Set(visibleIds);
+    const full = displayFinished().map(w => w.id);
+    let k = 0;
+    return applyOrder(full.map(id => (pick.has(id) ? seq[k++] : id)));
+  }
+
+  // 置顶：sortNo 取「置顶区内最小值 - 1」，保证新置顶落在置顶区最前
+  // （新置顶的卡压在之前置顶的卡上面）。
+  // 已经是置顶卡再落进顶部区 = 取消置顶 —— 同一个手势反着用，不另设入口。
+  function pinWork(w) {
+    if (!w) return;
+    if (w.pinnedAt) { unpinWork(w); return; }
+    const pinned = db.works.filter(x => x.pinnedAt && x.sortNo != null);
+    const min = pinned.length ? Math.min(...pinned.map(x => x.sortNo)) : 0;
+    w.pinnedAt = Date.now();
+    w.sortNo = min - 1;
+    const ok = saveDB();
+    renderRecords();
+    toast(ok ? '已置顶' : '置顶未保存', ok ? 'ok' : 'err');
+  }
+
+  // 取消置顶：只摘掉「是不是置顶」这个标记，卡片留在它当前的位置。
+  // 顺手把 sortNo 按当前展示顺序重写一遍：置顶时写的是「最小值 - 1」这种
+  // 临时排序值，只 delete 标记的话它会按这个值继续赖在前排。
+  function unpinWork(w) {
+    if (!w || !w.pinnedAt) return 0;
+    delete w.pinnedAt;
+    const ids = dragCards().map(c => c.dataset.id);
+    const i = ids.indexOf(w.id);
+    if (i >= 0) commitListOrder(ids, i, i);   // from === to：只重写 sortNo，不动顺序
+    else saveDB();
+    renderRecords();
+    toast('已取消置顶', 'ok');
+    return 1;
+  }
+
+  // 拖动落位后对账：置顶只负责「加新作品时它在最上面」，不负责按住排序的时候挡路。
+  // 一旦某张置顶卡被挤到普通卡下面，置顶标记就失效 ——
+  // 否则 displayFinished 的「置顶优先」会把用户刚排好的顺序当场弹回顶部。
+  // 判据：从落位序列的头往下走，遇到第一张非置顶卡之后，后面的置顶卡全部失效。
+  // 顺便保证「顶到置顶位的普通卡不会自动变成置顶」：这里只会摘标记，从不加。
+  function reconcilePins(seq) {
+    let seenFree = false, off = 0;
+    seq.forEach(id => {
+      const w = getWork(id);
+      if (!w) return;
+      if (!w.pinnedAt) { seenFree = true; return; }
+      if (seenFree) { delete w.pinnedAt; off++; }
+    });
+    return off;
+  }
+
+  // 删除：一律先确认，确认后才落盘（拖动不会误删）
+  function deleteWorkRequest(w) {
+    if (!w) return;
+    const total = (w.notes || []).length;
+    confirmModal({
+      icon: 'trash',
+      title: '删除《' + esc(w.title) + '》？',
+      text: total ? '作品和它的 ' + total + ' 条感想都会被删除，无法撤销。' : '作品会被删除，无法撤销。',
+      okLabel: '确认删除'
+    }).then(ok => { if (ok) removeWork(w.id); });
+  }
+
+  function removeWork(id) {
+    const idx = db.works.findIndex(x => x.id === id);
+    if (idx < 0) return false;
+    const refill = captureRecordTops(id);      // 量下剩余卡的旧位置
+    db.works.splice(idx, 1);
+    if (ui.detailId === id) closeDetail(true);
+    if (ui.readingId === id) ui.readingId = null;
+    const ok = saveDB();
+    renderAll();
+    playRefill(refill);                        // 剩下的卡滑上来补位
+    toast(ok ? '已删除' : '已删除，但保存失败', ok ? 'ok' : 'err');
+    return true;
+  }
+
+  // 删除后补位：先记下剩余卡片的旧顶边，重排后用 transform 补差再放开，
+  // 卡片是「滑上来」而不是瞬移。一次性动画，只碰 transform。
+  function captureRecordTops(exceptId) {
+    const screen = document.querySelector('.screen.active');
+    if (!screen || !screen.querySelector('#recordList')) return null;
+    const map = new Map();
+    $$('#recordList .record').forEach(el => {
+      if (el.dataset.id === exceptId) return;
+      const r = el.getBoundingClientRect();
+      if (r.height > 0) map.set(el.dataset.id, r.top);
+    });
+    return map.size ? map : null;
+  }
+
+  function playRefill(snap) {
+    if (!snap || !dragMotionOK()) return;
+    const list = $('#recordList');
+    if (!list) return;
+    const moved = [];
+    $$('#recordList .record').forEach(el => {
+      const oldTop = snap.get(el.dataset.id);
+      if (oldTop == null) return;
+      const dy = oldTop - el.getBoundingClientRect().top;
+      if (Math.abs(dy) < 1.5) return;
+      el.style.transition = 'none';
+      el.style.transform = 'translateY(' + dy + 'px)';
+      moved.push(el);
+    });
+    if (!moved.length) return;
+    void list.offsetWidth;
+    moved.forEach(el => {
+      el.style.transition = 'transform 220ms cubic-bezier(.22,.9,.26,1)';
+      el.style.transform = '';
+    });
+    setTimeout(() => moved.forEach(el => {
+      el.style.transition = '';
+      el.style.transform = '';
+    }), 260);
   }
 
   // 通用确认弹窗（替代 window.confirm：WebView 未接管 onJsConfirm 时会一律返回 false）
@@ -2406,7 +3833,7 @@
       const layer = document.createElement('div');
       layer.className = 'modal-layer';
       layer.innerHTML = `
-        <div class="modal-card">
+        <div class="modal-card" role="alertdialog" aria-modal="true">
           <div class="modal-icon">${icon(opts.icon || 'trash')}</div>
           <h3 class="modal-title">${opts.title || '确认操作？'}</h3>
           <p class="modal-text">${opts.text || ''}</p>
@@ -2422,7 +3849,7 @@
         if (settled) return;
         settled = true;
         layer.classList.remove('open');
-        setTimeout(() => layer.remove(), 200);
+        setTimeout(() => layer.remove(), 220);
         resolve(val);
       };
       layer.addEventListener('click', e => {
@@ -2432,109 +3859,49 @@
     });
   }
 
-  // 拖动删除确认：屏幕中间 modal
-  function openDragDeleteModal(w) {
-    if (!w) return;
-    const total = (w.notes || []).length;
-    const layer = document.createElement('div');
-    layer.className = 'modal-layer';
-    layer.innerHTML = `
-      <div class="modal-card">
-        <div class="modal-icon">${icon('trash')}</div>
-        <h3 class="modal-title">删除《${esc(w.title)}》？</h3>
-        <p class="modal-text">${total ? `作品和它的 ${total} 条感想都会被删除` : '作品会被删除'}，无法撤销。</p>
-        <div class="modal-actions">
-          <button class="modal-btn" data-modal-cancel>取消</button>
-          <button class="modal-btn modal-btn-danger" data-modal-ok>确认删除</button>
-        </div>
-      </div>`;
-    document.body.appendChild(layer);
-    requestAnimationFrame(() => layer.classList.add('open'));
-    const close = () => { layer.classList.remove('open'); setTimeout(() => layer.remove(), 200); };
-    layer.addEventListener('click', e => {
-      if (e.target === layer || e.target.closest('[data-modal-cancel]')) close();
-      else if (e.target.closest('[data-modal-ok]')) {
-        close();
-        const idx = db.works.findIndex(x => x.id === w.id);
-        if (idx >= 0) db.works.splice(idx, 1);
-        if (ui.detailId === w.id) closeDetail();
-        if (ui.readingId === w.id) ui.readingId = null;
-        saveDB();
-        renderAll();
-        toast('已删除');
-      }
-    });
-  }
-
-  function endDrag() {
-    if (!DRAG) return;
-    const d = DRAG; DRAG = null;
-    if (d.raf) cancelAnimationFrame(d.raf);
-    d.ghost.remove();
-    d.card.classList.remove('drag-placeholder');
-    d.card.style.transform = '';
-    document.body.classList.remove('drag-active');
-    const zt = $('#dragZoneTop'), zb = $('#dragZoneBottom');
-    if (zt) zt.classList.remove('show', 'active');
-    if (zb) zb.classList.remove('show', 'active');
-    $('#recordList').classList.remove('organizing');
-    $$('#recordList .record').forEach(c => { c.style.transform = ''; });
-
-    if (d.zone === 'top') {
-      // 已置顶的卡拖进顶部不再重复置顶，也不会被误取消置顶
-      if (!d.w.pinnedAt) { d.w.pinnedAt = Date.now(); saveDB(); renderRecords(); toast('已置顶'); }
-      else { renderRecords(); toast('已在置顶中'); }
-      return;
-    }
-    if (d.zone === 'bottom') {
-      renderRecords();
-      openDragDeleteModal(d.w);
-      return;
-    }
-    if (d.target != null && d.target !== d.origIndex) {
-      // target = 落点槽位：上方插到该槽位卡之前，下方插到其后（末尾追加）
-      const cards = $$('#recordList .record');
-      const ref = d.target < d.origIndex ? cards[d.target] : (cards[d.target + 1] || null);
-      $('#recordList').insertBefore(d.card, ref);
-      // v1.9.0：调序不再取消置顶；置顶卡按 DOM 顺序改写时间戳，固定置顶块内顺序
-      const pinnedCards = cards.filter(c => { const x = getWork(c.dataset.id); return x && x.pinnedAt; });
-      const base = Date.now();
-      pinnedCards.forEach((c, i) => {
-        const x = getWork(c.dataset.id);
-        if (x && x.pinnedAt) x.pinnedAt = base + (pinnedCards.length - i);
-      });
-      cards.forEach((c, i) => { const x = getWork(c.dataset.id); if (x) x.sortNo = i; });
-      saveDB(); toast('顺序已保存');
-    }
-    renderRecords();
-  }
-
-  // 拖动中拦截触摸滚动（拖动由指针事件驱动，触屏/鼠标通用）
+  // ── 指针事件：一对全局监听，覆盖触屏与鼠标，不随渲染重复绑定 ──
+  // 拖动中拦截触摸滚动（只在拖动期间生效，不给整页 touch-action:none）
   document.addEventListener('touchmove', e => { if (DRAG) e.preventDefault(); }, { passive: false });
 
-  // 长按进入整理：350ms 触发，位移超过 10px 视为滚动，取消长按
+  const lpCancel = () => {
+    if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+    lpCard = null; lpPoint = null;
+  };
+
   document.addEventListener('pointerdown', e => {
-    if (DRAG) return;
+    // 每次新手势先复位：拖动常常不产生 click，若只在 click 里复位，
+    // 这个标记会一直挂着，把下一次真正的点击吞掉。
+    ui.longPressFired = false;
+    if (DRAG || dragLock) return;
     if (e.button !== undefined && e.button !== 0) return;
     const card = e.target.closest('#recordList .record');
     if (!card) return;
-    if (e.target.closest('.now-edit, .pin-badge')) return; // 卡上的按钮不触发长按
-    lpCard = card; lpPoint = { x: e.clientX, y: e.clientY };
+    if (e.target.closest('.now-edit, .pin-badge')) return;   // 卡上的按钮不触发起拖
+    lpCard = card;
+    lpPoint = { x: e.clientX, y: e.clientY };
     lpTimer = setTimeout(() => {
       lpTimer = null;
       if (lpCard) beginOrganize(lpCard, lpPoint.y);
-    }, 350);
+    }, LP_MS);
   }, { passive: true });
-
-  const lpCancel = () => { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } lpCard = null; lpPoint = null; };
 
   document.addEventListener('pointermove', e => {
     if (DRAG) { moveDrag(e.clientY); return; }
-    if (lpTimer && lpPoint && Math.hypot(e.clientX - lpPoint.x, e.clientY - lpPoint.y) > 10) lpCancel();
+    if (lpTimer && lpPoint && Math.hypot(e.clientX - lpPoint.x, e.clientY - lpPoint.y) > LP_SLOP) lpCancel();
   }, { passive: true });
-  document.addEventListener('pointerup', () => { lpCancel(); if (DRAG) endDrag(); });
-  document.addEventListener('pointercancel', () => { lpCancel(); if (DRAG) endDrag(); });
-  window.addEventListener('blur', () => { lpCancel(); if (DRAG) endDrag(); });
+
+  document.addEventListener('pointerup', () => { lpCancel(); if (DRAG) endDrag(true); });
+  document.addEventListener('pointercancel', () => { lpCancel(); if (DRAG) endDrag(false); });
+  window.addEventListener('blur', () => { lpCancel(); if (DRAG) endDrag(false); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { lpCancel(); if (DRAG) endDrag(false); }
+  });
+  // 桌面/外接键盘：Esc 退出手势（不落库），长按计时中也一并取消
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape' && e.key !== 'Esc') return;
+    if (DRAG) { e.preventDefault(); endDrag(false); return; }
+    if (lpTimer) lpCancel();
+  });
 
   document.addEventListener('contextmenu', e => {
     if (e.target.closest('#recordList .record')) e.preventDefault();
@@ -2577,8 +3944,36 @@
     toast('已删除');
   }
 
-  // ── v2.0.2 · 新建菜单：以加号为中心 clip-path 圆形展开（恢复） ─────
-  const QA = { raf: 0, maxR: 0, busy: false };
+  // ── v2.4 · 新建菜单：以加号为中心圆形展开（transform 版，见 app.css 注释） ─────
+  // 阶段2 · 新建菜单展开：改由 CSS transition 驱动
+  // ---------------------------------------------------------------
+  // 之前用 rAF 逐帧写 transform，等于把本该交给合成线程的插值又抢回主线程做，
+  // 主线程一有别的活（渲染卡片、贴图解码）就会漏帧 —— 这就是「有时卡有时顺」。
+  // 现在只在起手写一次 transform，其余全部交给 CSS transition；
+  // 掉帧与否不再取决于主线程忙不忙。（提高帧数没用：rAF 已被屏幕刷新率封顶。）
+  const QA = { maxR: 0, busy: false, t1: 0, t2: 0 };
+  const QA_DUR = 420, QA_CLOSE_DUR = 280, QA_SCALE = 1.04;
+  const prefersReduced = () => {
+    try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; }
+  };
+
+  // 纯色大圆：圆形展开的载体。只改 transform，交给合成器，不触发重排重绘。
+  function qaBgEl() {
+    const layer = $('#quickAdd');
+    if (!layer) return null;
+    let bg = layer.querySelector('.qa-bg');
+    if (!bg) {
+      bg = document.createElement('div');
+      bg.className = 'qa-bg';
+      bg.setAttribute('aria-hidden', 'true');
+      layer.insertBefore(bg, layer.firstChild);
+    }
+    return bg;
+  }
+
+  function qaItemsIn(on) {
+    $$('#quickAdd .qa-item').forEach(el => el.classList.toggle('in', on));
+  }
 
   function openQuickAdd(anchorBtn) {
     const layer = $('#quickAdd');
@@ -2589,65 +3984,92 @@
     const appRect = $('#app').getBoundingClientRect();
     const cx = rect.left + rect.width / 2 - appRect.left;
     const cy = rect.top + rect.height / 2 - appRect.top;
-    QA.maxR = Math.hypot(Math.max(cx, appRect.width - cx), Math.max(cy, appRect.height - cy));
-    layer.style.setProperty('--qa-x', cx + 'px');
-    layer.style.setProperty('--qa-y', cy + 'px');
-    layer.style.setProperty('--qa-r', '0px');
+    const R = Math.hypot(Math.max(cx, appRect.width - cx), Math.max(cy, appRect.height - cy));
+    QA.maxR = R;
+
+    const bg = qaBgEl();
+    clearTimeout(QA.t1); clearTimeout(QA.t2);
     layer.classList.remove('closing');
     delete layer.dataset.itemsIn;
-    $$('#quickAdd .qa-item').forEach(el => el.classList.remove('in'));
+    qaItemsIn(false);
     layer.classList.add('open');
     layer.setAttribute('aria-hidden', 'false');
     buzzer(8);
 
+    if (!bg) return;
+
+    // 起手：清掉过渡把圆归零，强制一帧后再交回 CSS 过渡
+    bg.style.transition = 'none';
+    bg.style.width = (R * 2) + 'px';
+    bg.style.height = (R * 2) + 'px';
+    bg.style.left = (cx - R) + 'px';
+    bg.style.top = (cy - R) + 'px';
+    bg.style.transform = 'scale(0)';
+
+    if (prefersReduced()) {
+      bg.style.transition = '';
+      bg.style.transform = 'scale(' + QA_SCALE + ')';
+      qaItemsIn(true);
+      return;
+    }
+
+    void bg.offsetWidth;
+    bg.style.transition = '';
+    bg.style.transform = 'scale(' + QA_SCALE + ')';
+
     QA.busy = true;
-    const t0 = performance.now(), dur = 430;
-    cancelAnimationFrame(QA.raf);
-    const step = now => {
-      const p = Math.min(1, (now - t0) / dur);
-      const eased = 1 - Math.pow(1 - p, 3); // easeOutCubic：先快后缓，铺满更自然
-      const r = QA.maxR * eased;
-      layer.style.setProperty('--qa-r', r + 'px');
-      // 覆盖率过 85% 后，菜单项开始按每项 4 帧（≈66ms）交错进入
-      if (!layer.dataset.itemsIn && r >= QA.maxR * 0.85) {
-        layer.dataset.itemsIn = '1';
-        $$('#quickAdd .qa-item').forEach(el => el.classList.add('in'));
-      }
-      if (p < 1) QA.raf = requestAnimationFrame(step);
-      else QA.busy = false;
-    };
-    QA.raf = requestAnimationFrame(step);
+    QA.t1 = setTimeout(() => {
+      layer.dataset.itemsIn = '1';
+      qaItemsIn(true);                 // 圆盖住约 56% 时菜单项进场
+    }, Math.round(QA_DUR * 0.56));
+    QA.t2 = setTimeout(() => { QA.busy = false; }, QA_DUR + 20);
   }
 
   function closeQuickAdd(done) {
     const layer = $('#quickAdd');
     if (!layer || !layer.classList.contains('open')) { if (done) done(); return; }
-    cancelAnimationFrame(QA.raf);
+    const bg = layer.querySelector('.qa-bg');
+    clearTimeout(QA.t1); clearTimeout(QA.t2);
     QA.busy = true;
     layer.classList.add('closing');
-    const from = parseFloat(layer.style.getPropertyValue('--qa-r')) || QA.maxR;
-    const t0 = performance.now(), dur = 300;
-    const step = now => {
-      const p = Math.min(1, (now - t0) / dur);
-      const eased = p * p; // 沿原路收回，收尾更利落
-      layer.style.setProperty('--qa-r', (from * (1 - eased)) + 'px');
-      if (p < 1) {
-        QA.raf = requestAnimationFrame(step);
-      } else {
-        layer.classList.remove('open', 'closing');
-        layer.setAttribute('aria-hidden', 'true');
-        delete layer.dataset.itemsIn;
-        $$('#quickAdd .qa-item').forEach(el => el.classList.remove('in'));
-        QA.busy = false;
-        if (done) done();
-      }
+    qaItemsIn(false);
+
+    const finish = () => {
+      layer.classList.remove('open', 'closing');
+      layer.setAttribute('aria-hidden', 'true');
+      delete layer.dataset.itemsIn;
+      qaItemsIn(false);
+      if (bg) { bg.style.transition = 'none'; bg.style.transform = 'scale(0)'; }
+      QA.busy = false;
+      if (done) done();
     };
-    QA.raf = requestAnimationFrame(step);
+
+    if (!bg || prefersReduced()) { finish(); return; }
+    bg.style.transition = '';
+    bg.style.transform = 'scale(0)';
+    QA.t2 = setTimeout(finish, QA_CLOSE_DUR + 20);
   }
 
   function quickAddOpen() {
     const layer = $('#quickAdd');
     return !!(layer && layer.classList.contains('open'));
+  }
+
+  // 立刻收掉新建页（不做圆的缩放动画）。
+  // 用在「保存成功」：那一刻新建页被表单整页盖着，用户看不到中间过程，
+  // 但如果不收，收起表单后会停在中转页上，等于把人扔回了半路。
+  function qaHardClose() {
+    const layer = $('#quickAdd');
+    qaHold = false;
+    if (!layer || !layer.classList.contains('open')) return;
+    const bg = layer.querySelector('.qa-bg');
+    clearTimeout(QA.t1); clearTimeout(QA.t2);
+    layer.classList.remove('open', 'closing');
+    layer.setAttribute('aria-hidden', 'true');
+    delete layer.dataset.itemsIn;
+    qaItemsIn(false);
+    if (bg) { bg.style.transition = 'none'; bg.style.transform = 'scale(0)'; }
+    QA.busy = false;
   }
 
   // ── v2.0.2 · 表单状态切换：液态拉伸指示块 ────────────────
@@ -2719,6 +4141,117 @@
     segBlobRaf = requestAnimationFrame(step);
   }
 
+  // ── v2.4.1 · 液态指示块（记录筛选 / 想看筛选 / 在看作品栏共用） ──
+  // 三处的 DOM 形状是同一件事：一行可横滑的按钮 + 一个 .active。
+  // 所以只维护一套逻辑：前沿=运动方向先到的边（SEG_EASE_FRONT，末端轻微超调），
+  // 后沿延迟 90ms 追赶（SEG_EASE_BACK），中途宽度自然拉宽再收回。
+  // 用 left/width 驱动而不是 scaleX：999px 的圆角会被拉成椭圆。
+  // cur 记「眼睛当前看到的位置」而不是目标位置——连续快点时从半路接着走，不会回跳。
+  function liquidIndicator(rowGetter, activeGetter, cls, dur) {
+    const DUR = dur || 460, DELAY = 90;
+    let cur = null, raf = 0;
+
+    function ensure(row) {
+      // renderXxx 每次重写 innerHTML，blob 会被冲掉，这里重新挂回首位
+      let blob = row.querySelector('.' + cls);
+      if (!blob || blob.parentNode !== row) {
+        blob = document.createElement('span');
+        blob.className = cls;
+        blob.setAttribute('aria-hidden', 'true');
+      }
+      if (blob !== row.firstChild) row.insertBefore(blob, row.firstChild);
+      return blob;
+    }
+
+    function write(blob, l, w) {
+      blob.style.left = l.toFixed(2) + 'px';
+      blob.style.width = w.toFixed(2) + 'px';
+    }
+
+    function place(animate) {
+      const row = rowGetter();
+      if (!row) { cur = null; return; }
+      const blob = ensure(row);
+      const btn = activeGetter(row);
+      // 隐藏页 / 还没排版：先收起，等切到该页时再贴位（那时 cur 为 null → 直接落位）
+      if (!btn || !row.offsetWidth || !btn.offsetWidth) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+        cur = null;
+        blob.style.opacity = '0';
+        return;
+      }
+
+      const toL = btn.offsetLeft, toW = btn.offsetWidth;
+      blob.style.top = btn.offsetTop + 'px';
+      blob.style.height = btn.offsetHeight + 'px';
+
+      const from = cur;
+      const moving = !!from && (Math.abs(from.l - toL) > 0.5 || Math.abs(from.w - toW) > 0.5);
+      if (!animate || !moving || prefersReduced()) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+        write(blob, toL, toW);
+        blob.style.opacity = '1';
+        cur = { l: toL, w: toW };
+        return;
+      }
+
+      const fromL = from.l, fromR = from.l + from.w;
+      const toR = toL + toW;
+      const rightward = toL >= fromL;
+      const fS = rightward ? fromR : fromL, fE = rightward ? toR : toL;
+      const bS = rightward ? fromL : fromR, bE = rightward ? toL : toR;
+      const t0 = performance.now();
+
+      // 只按整段进度 t 写几何：前沿先到、后沿延迟追赶，合成 left/width
+      const paintAt = t => {
+        const front = fS + (fE - fS) * SEG_EASE_FRONT(t);
+        const bt = Math.min(1, Math.max(0, (t * DUR - DELAY) / (DUR - DELAY)));
+        const back = bS + (bE - bS) * SEG_EASE_BACK(bt);
+        const l = Math.min(front, back), w = Math.abs(front - back);
+        write(blob, l, w);
+        cur = { l, w };
+      };
+
+      cancelAnimationFrame(raf);
+      // v2.5.1：第 0 帧就地写「起点」再交给 rAF 推进。
+      // 原来是把目标位先写上、等第一个 rAF 再把它拉回起点——那一帧万一被画出来，
+      // 看到的就是「水滴先闪到目标位置、再倒回去从上一个选项划过来」。
+      // 每次 render 都会重写 innerHTML 造出新节点，所以这一帧几乎每次点击都存在。
+      paintAt(0);
+      blob.style.opacity = '1';
+
+      const step = now => {
+        const t = Math.min(1, (now - t0) / DUR);
+        if (t >= 1) {
+          write(blob, toL, toW);
+          cur = { l: toL, w: toW };
+          raf = 0;
+          return;
+        }
+        paintAt(t);
+        raf = requestAnimationFrame(step);
+      };
+      raf = requestAnimationFrame(step);
+    }
+
+    return { place, reset() { cancelAnimationFrame(raf); raf = 0; cur = null; } };
+  }
+
+  const RECORD_BLOB = liquidIndicator(
+    () => $('#recordFilters'), row => row.querySelector('.filter.active'), 'filter-blob');
+  const WISH_BLOB = liquidIndicator(
+    () => $('#wishFilters'), row => row.querySelector('.filter.active'), 'filter-blob');
+  // 在看页的作品栏：横滑 pill（卡拉马佐夫兄弟 …），切换作品时水滴横向吸附过去
+  const READER_BLOB = liquidIndicator(
+    () => $('#readerSwitcher .reader-switch'),
+    row => row.querySelector('.reader-pill.active'), 'reader-blob', 420);
+  // 阶段5 · 回顾页的胶囊筛选项（一年前 / 随便翻一条 / 最早的记录）
+  const RV_BLOB = liquidIndicator(
+    () => $('#rvModes'), row => row.querySelector('.filter.active'), 'filter-blob');
+  const placeFilterBlob = RECORD_BLOB.place;
+
   // ── v2.0 · 底部导航流式指示块（水滴吸附滑动） ────────────
   function placeNavBlob(animate) {
     const blob = $('#navBlob');
@@ -2754,12 +4287,12 @@
   document.addEventListener('click', e => {
     // 长按拖动刚结束 → 吞掉紧随的 click（防止误触卡片跳详情）
     if (ui.longPressFired) { ui.longPressFired = false; return; }
-    // v1.9.0：点击置顶徽标 = 取消置顶（不再靠拖拽误触）
+    // 点击置顶徽标 = 取消置顶（和「拖回顶部区」同一个落点逻辑）
     const pinEl = e.target.closest('.pin-badge');
     if (pinEl) {
       const card = pinEl.closest('.record');
       const w = card && getWork(card.dataset.id);
-      if (w && w.pinnedAt) { delete w.pinnedAt; saveDB(); renderRecords(); toast('已取消置顶'); }
+      if (w && w.pinnedAt) unpinWork(w);
       return;
     }
     const closeEl = e.target.closest('[data-close]');
@@ -2768,12 +4301,33 @@
       if (which === 'note') closeNoteSheet();
       if (which === 'actions') closeSheet('actionSheet');
       if (which === 'ai') closeSheet('aiSheet');
+      if (which === 'share') closeSheet('shareSheet');
     }
 
     const actionEl = e.target.closest('[data-action]');
     if (actionEl) {
       const action = actionEl.dataset.action;
       const id = actionEl.dataset.id;
+      // 展开来源必须是「眼睛真正看到的那张卡」。
+      // 旧写法优先取 #recordList 里的同名卡片，可是在「想看 / 在看」页时那块列表是 display:none，
+      // 拿到的是 0×0 矩形，dtGeometry 只好退化成屏幕中央的兜底框 —— 卡片长成详情页的隐喻整个断掉。
+      // 现在按「离点击最近 → 同名卡片 → 点击元素」排，并且只认真的占了地方的节点。
+      const sized = el => !!el && el.getBoundingClientRect().width > 4;
+      const openSrc = () => {
+        const cands = [
+          actionEl.closest('.record'),
+          actionEl.closest('.now-card'),
+          actionEl.closest('.wish-main'),
+          actionEl.closest('.current-main'),
+          actionEl.closest('.search-result'),
+          document.querySelector(`#recordList .record[data-id="${id}"]`),
+          document.querySelector(`.now-card[data-id="${id}"]`),
+          document.querySelector(`.wish-main[data-id="${id}"]`),
+          document.querySelector(`.current-main[data-id="${id}"]`),
+          actionEl
+        ];
+        return cands.find(sized) || actionEl;
+      };
       if (action === 'open-detail') {
         closeSheet('actionSheet');
         if ($('#searchPage').classList.contains('open')) {
@@ -2781,13 +4335,13 @@
           if (sq) pushSearchHistory(sq);
           closeSearch();
         }
-        openDetail(id);
+        openDetail(id, openSrc());
         return;
       }
-      if (action === 'view-detail') { openDetail(id); return; }
+      if (action === 'view-detail') { openDetail(id, openSrc()); return; }
       if (action === 'go-records') { switchTab('records'); return; }
       if (action === 'open-search') { openSearch(); return; }
-  // v2.0.2：恢复「新建」菜单——点加号先以 clip-path 圆形展开菜单
+  // 点加号 → 以加号为中心圆形展开菜单
       if (action === 'add-new') {
         openQuickAdd(actionEl);
         return;
@@ -2895,6 +4449,59 @@
       if (action === 'new-work') { openAdd('finished'); return; }
       if (action === 'new-reading') { openAdd('reading'); return; }
       if (action === 'new-wish') { openAdd('wish'); return; }
+      // 阶段4 · 发现：只读现有待看数据，不产生任何新记录
+      if (action === 'discover-inspire') { drawWish('inspire'); return; }
+      if (action === 'discover-roll') { drawWish('roll'); return; }
+      if (action === 'discover-close') { ui.pickId = null; ui.pickSource = ''; renderPick(); return; }
+      if (action === 'discover-all') { ui.wishFilter = 'all'; renderWishlist(); return; }
+      if (action === 'discover-detail') {
+        openDetail(id, actionEl.closest('.pick-inner') || actionEl);
+        return;
+      }
+      if (action === 'discover-start') {
+        ui.pickId = null; ui.pickSource = '';
+        startReading(id);      // 就地改 status，不复制作品；看完再补评分感想
+        return;
+      }
+      // 阶段5 · 回顾：全部只读真实记录，不写数据、不新增存储键
+      if (action === 'rv-mode') {
+        const mode = actionEl.dataset.mode;
+        if (mode && mode !== ui.rvMode) {
+          ui.rvMode = mode;
+          ui.rvPickId = null;   // 换池子必须重抽，不然会留着上一个池子的记录
+          renderReview();
+        }
+        return;
+      }
+      if (action === 'rv-roll') { rvRoll(); return; }
+      if (action === 'rv-open') { openDetail(id, actionEl.closest('.rv-hero') || actionEl.closest('.rv-feat') || actionEl); return; }
+      if (action === 'rv-edit') {
+        const w = getWork(id);
+        if (w) openAdd(w.status, id);
+        return;
+      }
+      if (action === 'rv-prev') { rvStep(-1); return; }
+      if (action === 'rv-next') { rvStep(1); return; }
+      if (action === 'rv-scope') {
+        const scope = actionEl.dataset.scope === 'year' ? 'year' : 'month';
+        if (scope !== ui.rvScope) { ui.rvScope = scope; renderMonth(); }
+        return;
+      }
+      if (action === 'rv-jump-month') {
+        const key = actionEl.dataset.month;
+        if (key) { ui.rvScope = 'month'; ui.rvMonth = key; renderMonth(); }
+        return;
+      }
+      if (action === 'rv-share') { renderShareSheet(); openSheet('shareSheet'); return; }
+      if (action === 'rv-share-toggle') {
+        const part = actionEl.dataset.part;
+        if (part && ui.shareParts[part] !== undefined) {
+          ui.shareParts[part] = !ui.shareParts[part];
+          renderShareSheet();
+        }
+        return;
+      }
+      if (action === 'rv-share-copy') { rvCopyShare(); return; }
     }
 
     const filterEl = e.target.closest('[data-filter-kind]');
@@ -2971,11 +4578,15 @@
     const item = e.target.closest('[data-qa]');
     if (item) {
       const kind = item.dataset.qa;
-      closeQuickAdd(() => {
-        buzzer(8);
-        if (kind === 'search') openSearch();
-        else openAdd(kind === 'wish' ? 'wish' : kind === 'reading' ? 'reading' : 'finished');
-      });
+      buzzer(8);
+      if (kind === 'search') {
+        // 搜索要走整屏搜索页（结果再进详情页，详情页 z-index 比新建层低），照旧先收新建页
+        closeQuickAdd(() => openSearch());
+        return;
+      }
+      // 其余三项是表单：直接从底部当抽屉推上来，新建页留在下面不收。
+      // 以前是 closeQuickAdd(cb) → 等圆缩完（280ms）再 openAdd，观感就是「先收掉、再弹出」。
+      openAdd(kind === 'wish' ? 'wish' : kind === 'reading' ? 'reading' : 'finished', null, false, true);
       return;
     }
     if (quickAddOpen() && e.target.closest('#quickAdd')) closeQuickAdd();
@@ -2984,6 +4595,9 @@
   // 转屏 / 可视区域变化：指示块重新贴位，菜单半径失效则直接收回
   window.addEventListener('resize', () => {
     placeNavBlob(false);
+    RECORD_BLOB.reset(); WISH_BLOB.reset(); READER_BLOB.reset(); RV_BLOB.reset();
+    RECORD_BLOB.place(false); WISH_BLOB.place(false); READER_BLOB.place(false); RV_BLOB.place(false);
+    if (dtOrigin) dtOrigin.g = null;   // 转屏后快照失效，收起时按卡片现位置重算
     if (quickAddOpen()) { closeQuickAdd(); segBlobState = null; }
   });
   // 历史项：点击回填、删除单条、清空全部
@@ -3017,6 +4631,9 @@
 
   $('#cancelAdd').addEventListener('click', closeAdd);
   $('#saveWork').addEventListener('click', saveWork);
+  // 快速记录：与「保存」同一条流程，只是不写没被真正动过的默认分数
+  const saveQuickBtn = $('#saveQuick');
+  if (saveQuickBtn) saveQuickBtn.addEventListener('click', () => saveWork(true));
 
   $$('#statusSeg button').forEach(btn => btn.addEventListener('click', () => {
     ui.formStatus = btn.dataset.status;
@@ -3030,7 +4647,7 @@
     if (ui.formStatus === 'wish') renderTagChips();
   }));
   $('#formTitle').addEventListener('input', () => { if (!ui.formIcon) renderFormIcon(); });
-  $('#formRating').addEventListener('input', syncRating);
+  $('#formRating').addEventListener('input', () => { ui.ratingTouched = true; syncRating(); });
   $('#formTag').addEventListener('input', renderTagChips);
   $('#pickIcon').addEventListener('click', () => { ui.iconEditTarget = null; lingPickOrClick('#iconFile', 1, handleIconFile); });
   $('#resetIcon').addEventListener('click', () => { ui.formIcon = null; renderFormIcon(); toast('已恢复默认图标'); });
@@ -3063,7 +4680,9 @@
     if (e.target.id === 'imageViewer') closeViewer();
   });
 
-  $('#closeDetail').addEventListener('click', closeDetail);
+  // 包一层：直接把 closeDetail 交给 addEventListener，事件对象会被当成 instant 参数传进去，
+  // 结果收起动画永远不会播（v2.3.0 修）
+  $('#closeDetail').addEventListener('click', () => closeDetail());
   $('#detailMore').addEventListener('click', () => openActionMenu(getWork(ui.detailId), true));
 
   $('#saveSheetNote').addEventListener('click', saveSheetNote);
@@ -3109,15 +4728,19 @@
   // 原生返回键：先逐层收起弹层 → 再回到主页（记录）→ 主页再按一次才退出
   let backExitArm = 0;
   window.androidBack = () => {
+    // 顺序按层的上下关系：谁在最上面就先收谁。
+    // quickAdd 不能排在最前 —— 从它里面打开的表单/搜索会把它留在底下，
+    // 那时按返回应该先收表单，而不是把底下的新建页抽走。
     const overlayMap = [
-      ['quickAdd', () => closeQuickAdd()],
       ['imageViewer', closeViewer],
       ['cropPage', closeCropPage],
       ['actionSheet', () => closeSheet('actionSheet')],
       ['noteSheet', closeNoteSheet],
       ['aiSheet', () => closeSheet('aiSheet')],
-      ['addPage', closeAdd],
+      ['shareSheet', () => closeSheet('shareSheet')],
       ['searchPage', closeSearch],
+      ['addPage', closeAdd],
+      ['quickAdd', () => closeQuickAdd()],
       ['detailPage', null]
     ];
     for (const [id, fn] of overlayMap) {
@@ -3144,13 +4767,15 @@
 
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
-      if (quickAddOpen()) { closeQuickAdd(); }
-      else if ($('#imageViewer').classList.contains('open')) { closeViewer(); }
+      // 与返回键同序：叠在上面的先收（新建页可能被表单留在底下）
+      if ($('#imageViewer').classList.contains('open')) { closeViewer(); }
       else if ($('#cropPage').classList.contains('open')) { closeCropPage(); }
       else if ($('#actionSheet').classList.contains('open')) { closeSheet('actionSheet'); }
       else if ($('#noteSheet').classList.contains('open')) { closeNoteSheet(); }
-      else if ($('#addPage').classList.contains('open')) { closeAdd(); }
+      else if ($('#shareSheet').classList.contains('open')) { closeSheet('shareSheet'); }
       else if ($('#searchPage').classList.contains('open')) { closeSearch(); }
+      else if ($('#addPage').classList.contains('open')) { closeAdd(); }
+      else if (quickAddOpen()) { closeQuickAdd(); }
       else if ($('#detailPage').classList.contains('open')) {
         if (ui.ratingEditing) cancelRatingEdit();
         else closeDetail();
@@ -3260,8 +4885,10 @@
       const id = 'p' + (++lingPickSeq);
       lingPickCbs[id] = res;
       try { b.pickImages(id, max || 1); } catch (e) { delete lingPickCbs[id]; return res(null); }
-      // 用户在相册停留可能很久，给足 5 分钟
-      setTimeout(() => { if (lingPickCbs[id]) { delete lingPickCbs[id]; res(null); } }, 300000);
+      // 用户在相册停留可能很久，给足 5 分钟。
+      // 超时按「已答复」的空结果处理（res([])）：那时候早没有用户手势了，
+      // 再回退去点 input 只会让相册莫名自己弹一次。
+      setTimeout(() => { if (lingPickCbs[id]) { delete lingPickCbs[id]; res([]); } }, 300000);
     });
   }
   // input 选中的 File → data URL（走原 compressImage 逻辑的简化版：只转 URL 不重压）
@@ -3275,14 +4902,19 @@
   }
   // 优先走原生选图；原生不可用时退回 input.click()（WebView 文件选择器）。
   // handle 接收的是 data URL 字符串数组（原生直接给，input 路径转好再给）。
+  //
+  // 返回值约定：null = 原生这条路走不通（没有桥 / 调用直接抛错）→ 才回退；
+  //            数组（哪怕是空数组）= 原生已经答复过了。空数组说明用户在相册里点了取消，
+  //            这时绝对不能回退 —— 回退会立刻再弹一次选择器，表现就是「取消后自己又弹出来」。
   async function lingPickOrClick(inputSel, max, handle) {
     const b = bridge();
     if (b && b.pickImages) {
-      try {
-        const urls = await bridgePickImages(max);
-        if (urls && urls.length) { await handle(urls); return; }
-        // 返回空（用户取消或 URI 解析失败）→ 回退到 input 路径再试一次，避免静默无响应
-      } catch (e) { /* 原生失败时退回旧路径 */ }
+      let urls = null;
+      try { urls = await bridgePickImages(max); } catch (e) { urls = null; }
+      if (Array.isArray(urls)) {
+        if (urls.length) await handle(urls);
+        return;
+      }
     }
     const inp = $(inputSel);
     if (!inp) return;
@@ -3988,7 +5620,9 @@
   // 3) 每日推荐（文章 + 电影片段），按日期缓存
   function openDaily() {
     openSheet('aiSheet');
-    $('#aiSheetTitle').textContent = '每日推荐';
+    // 标题带上 AI：和「想看」页那条基于真实待看的「今日灵感」明确分开，
+    // 用户一眼能看出哪条是本地挑选、哪条是模型生成的推测。
+    $('#aiSheetTitle').textContent = '每日推荐 · AI';
     const today = todayISO();
     const cached = (() => { try { const o = JSON.parse(localStorage.getItem(AI_DAILY_KEY) || 'null'); return o && o.date === today ? o : null; } catch (e) { return null; } })();
     if (cached) { renderDaily(cached); return; }

@@ -77,6 +77,9 @@
         <h1 class="screen-title">想看的</h1>
         <p class="head-sub" id="wishStats"></p>
       </div>
+      <!-- 阶段4：轻量发现（今日灵感 + 随手一抽），只从真实待看数据里挑，不新建记录 -->
+      <div class="discover" id="discoverBar"></div>
+      <div class="discover-pick" id="discoverPick" hidden></div>
       <div class="filter-row" id="wishFilters"></div>
       <div id="wishGroups"></div>
       <div id="wishEmpty"></div>
@@ -100,6 +103,27 @@
       <div id="readerSwitcher"></div>
       <div id="readingContent"></div>
     </section>
+
+    <!-- 阶段5 · 回顾：时间胶囊 + 月度/年度。所有数字都从记录里的真实字段算，不补、不猜 -->
+    <section class="screen" id="screen-review">
+      <div class="screen-topbar">
+        <div class="brand-group">
+          <button class="icon-btn" data-action="open-drawer" aria-label="设置"><svg class="icon"><use href="#i-menu"/></svg></button>
+          <button class="brand" data-action="go-records" aria-label="回到记录">铃<span class="brand-dot"></span></button>
+        </div>
+        <div class="brand-actions">
+          <button class="icon-btn" data-action="open-search" aria-label="搜索"><svg class="icon"><use href="#i-search"/></svg></button>
+          <button class="add-btn" data-action="add-new" aria-label="添加作品"><svg class="icon"><use href="#i-plus"/></svg></button>
+        </div>
+      </div>
+      <div class="page-head">
+        <h1 class="screen-title">回顾</h1>
+        <p class="head-sub" id="reviewSub"></p>
+      </div>
+      <div class="filter-row" id="rvModes"></div>
+      <div id="rvCapsule"></div>
+      <div id="rvMonth"></div>
+    </section>
   </main>
 
   <div class="bottom-glow"></div>
@@ -108,6 +132,7 @@
     <button class="nav-item active" data-tab="records"><svg class="icon"><use href="#i-layers"/></svg><span>记录</span></button>
     <button class="nav-item" data-tab="wishlist"><svg class="icon"><use href="#i-bookmark"/></svg><span>想看</span></button>
     <button class="nav-item" data-tab="reading"><svg class="icon"><use href="#i-reading"/></svg><span>在看</span></button>
+    <button class="nav-item" data-tab="review"><svg class="icon"><use href="#i-calendar"/></svg><span>回顾</span></button>
   </nav>
 
   <!-- 添加 / 编辑作品 -->
@@ -209,6 +234,7 @@
       </div>
     </div>
     <div class="page-footer">
+      <button class="quick-save" id="saveQuick" type="button" hidden>先存下 · 评分和感想稍后补</button>
       <button class="primary-btn" id="saveWork"><span id="saveWorkLabel">保存记录</span><svg class="icon"><use href="#i-arrow-right"/></svg></button>
     </div>
   </div>
@@ -293,6 +319,15 @@
         <button class="sheet-close" data-close="ai" aria-label="关闭"><svg class="icon"><use href="#i-close"/></svg></button>
       </div>
       <div class="ai-sheet-body" id="aiSheetBody"></div>
+    </div>
+  </div>
+
+  <!-- 阶段5 · 分享：默认只发数字，作品标题与感想必须用户自己勾选 -->
+  <div class="sheet-layer" id="shareSheet" aria-hidden="true">
+    <div class="sheet-backdrop" data-close="share"></div>
+    <div class="sheet">
+      <div class="sheet-grip"></div>
+      <div id="shareContent" class="rv-share-sheet"></div>
     </div>
   </div>
 
