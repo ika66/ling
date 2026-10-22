@@ -2140,3 +2140,172 @@ input,textarea{color:var(--ink)}
 }
 /* 指示块接管选中态背景，导航项本身透明 */
 .glass-nav .nav-item.active{background:transparent;box-shadow:none}
+
+/* ══════════════════════════════════════════════════════
+   v2.2.2 · 午夜放映室
+   深石墨底 / 冷调银灰字 / 克制钴蓝高光 / 封面优先
+   原则：只追加覆盖，不修改上方任何既有规则；
+        其余六套主题的变量值与观感保持不变。
+   ══════════════════════════════════════════════════════ */
+
+/* ── 1) 设计令牌（默认值等同改造前，六套旧主题零变化） ── */
+:root{
+  --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:20px;
+  --sh-card:0 10px 26px -22px rgba(20,28,50,.45);
+  --sh-float:0 18px 40px -22px rgba(20,28,50,.42);
+  --btn-bg:var(--ink); --btn-fg:#fff;
+  --toast-bg:rgba(30,34,43,.94); --toast-fg:#fff;
+  --glow-1:rgba(143,167,242,.26); --glow-2:rgba(167,143,224,.14);
+  --add-grad:linear-gradient(145deg,#AFC2F8,#829BEA);
+  --add-shadow:0 8px 18px -9px rgba(88,114,198,.8);
+}
+
+/* ── 2) 新主题：午夜放映室 ── */
+:root[data-theme="cinema"]{
+  color-scheme:dark;
+  --paper:#0F1217; --paper-soft:#141820; --paper-deep:#191F28;
+  --ink:#E9EDF4; --ink-soft:#B3BCCC; --muted:#7E8798; --muted-light:#5A6272;
+  --hair:rgba(255,255,255,.075); --hair-strong:rgba(255,255,255,.14);
+  --accent:#4F6FE8; --accent-deep:#8496F2; --accent-soft:rgba(79,111,232,.16);
+  --page-bg:#090B0F;
+  --hero-start:#1C2637; --hero-end:#0A0E14;
+  --surface-2:#1B2029;
+  --nav-bg:rgba(23,27,35,.78); --nav-bg2:rgba(15,18,24,.62);
+  --card-bg:#14181F; --card-line:rgba(255,255,255,.08);
+  --page-bg-rgb:9,11,15;
+  --danger:#D87B85;
+  --btn-bg:#3F5ED6; --btn-fg:#F3F6FF;
+  --toast-bg:rgba(233,237,244,.96); --toast-fg:#0B0E13;
+  --glow-1:rgba(79,111,232,.30); --glow-2:rgba(26,42,86,.26);
+  --add-grad:linear-gradient(145deg,#6D86F0,#3A55C9);
+  --add-shadow:0 8px 20px -9px rgba(46,74,190,.9);
+}
+
+/* 深色旧主题顺带修掉「浅底白字」的主按钮缺陷（追加覆盖，不改原规则） */
+:root[data-theme="midnight"]{ --btn-bg:#4257B8; --btn-fg:#F2F5FF; }
+
+/* ── 3) 令牌落地：主按钮 / Toast / 底部光晕 / 加号 ── */
+.primary-btn{background:var(--btn-bg);color:var(--btn-fg)}
+.toast{background:var(--toast-bg);color:var(--toast-fg)}
+.bottom-glow{
+  background:
+    radial-gradient(ellipse at 50% 72%,var(--glow-1),transparent 58%),
+    radial-gradient(ellipse at 24% 100%,var(--glow-2),transparent 55%);
+}
+.add-btn{background:var(--add-grad);box-shadow:var(--add-shadow)}
+
+/* ── 4) 置顶标识（此前 .pin-badge / .record.pinned 无任何样式） ── */
+.record{position:relative}
+.record.pinned .record-index{color:var(--accent-deep)}
+.record.pinned .record-index::after{width:14px;opacity:.85}
+.pin-badge{
+  position:absolute;z-index:3;left:57px;top:7px;
+  width:17px;height:17px;border-radius:6px;display:grid;place-items:center;
+  color:var(--accent-deep);background:var(--accent-soft);
+  box-shadow:0 2px 8px -3px rgba(8,12,24,.45),inset 0 0 0 1px rgba(132,150,242,.28);
+  pointer-events:auto;
+}
+.pin-badge .icon{width:10px;height:10px;stroke-width:2.1}
+:root[data-theme="cinema"] .pin-badge{background:rgba(11,15,22,.82);color:#B9C7FF;box-shadow:0 2px 10px -3px rgba(0,0,0,.8),inset 0 0 0 1px rgba(132,150,242,.35)}
+
+/* ── 5) 午夜放映室 · 组件精修 ── */
+:root[data-theme="cinema"] .now-card{
+  background:linear-gradient(150deg,#1E2A3D 0%,#131A26 44%,#0A0E14 100%);
+  box-shadow:0 20px 44px -26px rgba(0,0,0,.92),inset 0 0 0 1px rgba(122,146,255,.12);
+}
+:root[data-theme="cinema"] .now-card::after{color:rgba(132,150,242,.085)}
+:root[data-theme="cinema"] .now-scrim{
+  background:linear-gradient(180deg,rgba(6,9,14,0) 30%,rgba(6,9,14,.30) 60%,rgba(6,9,14,.82) 100%);
+}
+:root[data-theme="cinema"] .now-kind{
+  background:rgba(8,12,18,.52);border:1px solid rgba(255,255,255,.14);color:#E7ECF8;
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+}
+:root[data-theme="cinema"] .now-cta{
+  background:rgba(79,111,232,.22);border:1px solid rgba(132,150,242,.44);color:#DDE4FF;
+}
+:root[data-theme="cinema"] .now-dot{background:rgba(255,255,255,.16)}
+
+:root[data-theme="cinema"] .filter{background:rgba(255,255,255,.03);border-color:var(--hair);color:var(--muted)}
+:root[data-theme="cinema"] .filter.active{
+  background:rgba(79,111,232,.20);border-color:rgba(132,150,242,.45);color:#C9D4FF;
+}
+:root[data-theme="cinema"] .record-thought{color:var(--ink-soft)}
+:root[data-theme="cinema"] .record-rating{color:#DCE3F0}
+:root[data-theme="cinema"] .cover{
+  box-shadow:inset 0 0 0 .5px rgba(255,255,255,.16),inset -7px 0 12px -9px rgba(0,0,0,.55),0 8px 18px -10px rgba(0,0,0,.75);
+}
+:root[data-theme="cinema"] .cover.has-image{box-shadow:0 8px 18px -10px rgba(0,0,0,.8),inset 0 0 0 .5px rgba(255,255,255,.10)}
+
+:root[data-theme="cinema"] .glass-nav{
+  background:linear-gradient(135deg,rgba(34,40,52,.88),rgba(15,19,26,.80));
+  border-color:rgba(255,255,255,.10);
+  box-shadow:0 22px 46px -20px rgba(0,0,0,.9),inset 0 1px 0 rgba(255,255,255,.07),inset 0 -1px 0 rgba(79,111,232,.16);
+}
+:root[data-theme="cinema"] .glass-nav::before{
+  background:linear-gradient(135deg,rgba(255,255,255,.05),transparent 44%,rgba(79,111,232,.09));
+}
+:root[data-theme="cinema"] .nav-item{color:#78818F}
+:root[data-theme="cinema"] .nav-item.active{color:#D5DEFF}
+:root[data-theme="cinema"] .glass-nav .nav-blob{
+  background:linear-gradient(135deg,rgba(79,111,232,.36),rgba(60,88,196,.26));
+  box-shadow:0 6px 16px -10px rgba(0,0,0,.9),inset 0 0 0 1px rgba(132,150,242,.30),inset 0 1px 0 rgba(255,255,255,.10);
+}
+
+:root[data-theme="cinema"] .composer{
+  background:var(--card-bg);border-color:var(--card-line);
+  box-shadow:0 18px 38px -30px rgba(0,0,0,.9);
+}
+:root[data-theme="cinema"] .current-card{
+  background:linear-gradient(155deg,#1A2130,#121720);
+  border-color:rgba(255,255,255,.07);
+  box-shadow:0 20px 42px -30px rgba(0,0,0,.92);
+}
+:root[data-theme="cinema"] .note::before{background:var(--paper)}
+:root[data-theme="cinema"] .segmented{background:rgba(255,255,255,.045)}
+:root[data-theme="cinema"] #statusSeg .seg-blob{
+  background:#252C38;
+  box-shadow:0 3px 10px -4px rgba(0,0,0,.65),inset 0 0 0 1px rgba(255,255,255,.07);
+}
+:root[data-theme="cinema"] .input,
+:root[data-theme="cinema"] .textarea,
+:root[data-theme="cinema"] .search-box{background:rgba(255,255,255,.04)}
+:root[data-theme="cinema"] .qa-layer{background:radial-gradient(120% 80% at 50% 0%,#131A26,#080A0E 72%)}
+:root[data-theme="cinema"] .qa-item{
+  background:rgba(255,255,255,.045);border-color:rgba(255,255,255,.08);
+  box-shadow:0 18px 36px -26px rgba(0,0,0,.95);
+}
+:root[data-theme="cinema"] .qa-ico{background:rgba(79,111,232,.20);color:#C6D2FF}
+:root[data-theme="cinema"] .drawer-btn{background:rgba(255,255,255,.05)}
+:root[data-theme="cinema"] .drawer-btn .icon{color:#9FB2FF}
+:root[data-theme="cinema"] .theme-opt{background:rgba(255,255,255,.04)}
+:root[data-theme="cinema"] .sheet{
+  box-shadow:0 -24px 56px -26px rgba(0,0,0,.92),0 -1px 0 rgba(255,255,255,.06);
+}
+:root[data-theme="cinema"] .modal-card{box-shadow:0 40px 90px -40px rgba(0,0,0,.95)}
+:root[data-theme="cinema"] .empty-state{background:rgba(255,255,255,.025)}
+:root[data-theme="cinema"] .drag-chip{background:#171C24}
+
+/* ── 6) 动效统一：按压反馈与过渡节奏（全主题通用，不改布局） ── */
+.record,.wish,.ai-card,.ai-daily-card,.theme-opt,.drawer-btn{
+  transition:transform .18s cubic-bezier(.2,.8,.2,1),background-color .22s ease,border-color .22s ease,opacity .18s ease;
+}
+.record:active{background:rgba(127,140,255,.055)}
+.wish:active,.ai-daily-card:active{transform:scale(.994)}
+.qa-item:active,.drawer-btn:active{transform:scale(.985)}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms!important;animation-iteration-count:1!important;
+    transition-duration:.001ms!important;scroll-behavior:auto!important;
+  }
+}
+
+/* v2.2.2 · 深色下仍会发白的零星硬编码色（追加覆盖，浅色主题不受影响） */
+:root[data-theme="cinema"] .action-item.danger{color:var(--danger)}
+:root[data-theme="cinema"] .ai-dc-tag-clip{color:#F0B49A;background:rgba(214,124,86,.16)}
+:root[data-theme="cinema"] .ai-quote{color:var(--ink-soft)}
+:root[data-theme="cinema"] .ai-quote::before,
+:root[data-theme="cinema"] .ai-quote::after{color:var(--accent-deep)}
+:root[data-theme="cinema"] .sheet-save{background:var(--accent-soft);color:var(--accent-deep)}
+:root[data-theme="cinema"] #statusSeg button.active{color:var(--ink)}

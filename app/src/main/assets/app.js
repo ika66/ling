@@ -739,6 +739,7 @@
   };
   const themeCache = new Map();
   let themeToken = 0;
+  let rawDetailTheme = null; // v2.2.2：记住封面算出的原始主题，切主题时可立即重绘
 
   function clampNum(n, min, max) { return Math.max(min, Math.min(max, n)); }
 
@@ -873,10 +874,24 @@
     };
   }
 
+  // v2.2.2：深色主题下，详情页不再跟随封面翻成浅色。
+  // 保留「封面优先」的构图，但底色统一压到石墨，钴蓝仅作高光与强调。
+  function darkenDetailTheme() {
+    return {
+      bg: '#0B0E13', bgRgb: '11,14,19',
+      fg: '#E9EDF4', soft: 'rgba(233,237,244,.62)',
+      hair: 'rgba(255,255,255,.12)', chip: 'rgba(255,255,255,.10)',
+      accent: '#8FA3F5', dark: true, ink: '#C6CEDC',
+      card: 'rgba(255,255,255,.055)', cardLine: 'rgba(255,255,255,.09)',
+      glass: 'rgba(20,24,32,.66)', glassLine: 'rgba(255,255,255,.14)', glassHi: 'rgba(255,255,255,.20)',
+      line: 'rgba(255,255,255,.10)', lineStrong: 'rgba(255,255,255,.18)',
+      accentSoft: 'rgba(132,150,242,.16)'
+    };
+  }
   function applyDetailTheme(theme) {
     const page = $('#detailPage');
     if (!page) return;
-    const t = theme || DEFAULT_THEME;
+    const t = appThemeIsDark() ? darkenDetailTheme() : (theme || DEFAULT_THEME);
     page.classList.toggle('dt-dark', !!t.dark);
     page.style.setProperty('--dt-bg', t.bg);
     page.style.setProperty('--dt-bg-rgb', t.bgRgb || '233,238,248');
@@ -898,12 +913,13 @@
 
   function syncDetailTheme(src) {
     const token = ++themeToken;
-    if (!src) { applyDetailTheme(null); return; }
-    if (themeCache.has(src)) { applyDetailTheme(themeCache.get(src)); return; }
+    if (!src) { rawDetailTheme = null; applyDetailTheme(null); return; }
+    if (themeCache.has(src)) { rawDetailTheme = themeCache.get(src); applyDetailTheme(rawDetailTheme); return; }
 
     const finish = theme => {
       if (themeCache.size > 48) themeCache.clear();
       themeCache.set(src, theme);
+      rawDetailTheme = theme;
       if (token === themeToken) applyDetailTheme(theme);
     };
 
@@ -941,7 +957,8 @@
   function applySlideTheme(slide, work) {
     if (slide && slide.kind === 'img') { syncDetailTheme(slide.src); return; }
     themeToken++;
-    applyDetailTheme(artTheme(work));
+    rawDetailTheme = artTheme(work);
+    applyDetailTheme(rawDetailTheme);
   }
 
   function buildSlides(work) {
@@ -3449,8 +3466,8 @@
         const bg = getComputedStyle($('#detailPage')).getPropertyValue('--dt-bg') || '';
         light = lingLuma(bg.trim()) > 0.55;
       } else if (forceLight) {
-        // 非详情页强制浅色时，仍要尊重全局深色主题（午夜蓝）
-        light = currentTheme() !== 'midnight';
+        // 非详情页强制浅色时，仍要尊重全局深色主题（午夜放映室 / 午夜蓝）
+        light = !appThemeIsDark();
       }
       b.setStatusBarIcons(light);
     } catch (e) {}
@@ -4059,25 +4076,47 @@
   // ── 多主题色系统 ─────────────────────────────────────
   const THEME_KEY = 'yuwei.theme.v1';
   const THEMES = [
+    { id: 'cinema',   name: '午夜放映室', sw: ['#0F1217', '#8496F2', '#1C2637'], dark: true },
     { id: 'mist',     name: '海雾青', sw: ['#F5F7FA', '#5E78C8', '#397C80'] },
     { id: 'ink',      name: '水墨灰', sw: ['#F4F2ED', '#6E7781', '#555B60'] },
     { id: 'lavender', name: '薰衣紫', sw: ['#F7F3FC', '#8B79C6', '#8373B8'] },
     { id: 'forest',   name: '森林绿', sw: ['#F2F4EA', '#78947B', '#527B65'] },
     { id: 'sunset',   name: '落日橘', sw: ['#FFF6ED', '#DB8868', '#D99A79'] },
-    { id: 'midnight', name: '午夜蓝', sw: ['#11151D', '#8199E8', '#244F68'] }
+    { id: 'midnight', name: '午夜蓝', sw: ['#11151D', '#8199E8', '#244F68'], dark: true }
   ];
+  const DEFAULT_THEME_ID = 'cinema';
+  // 旧版默认主题是「海雾青」。升级到 2.2.2 时做一次性迁移：
+  // 没主动选过主题（仍是 mist）的用户直接进入新主题；之后手动切回任一套都尊重选择。
+  const THEME_MIGRATED_KEY = 'yuwei.theme.migrated.v1';
   function currentTheme() {
     let t = '';
     try { t = String(localStorage.getItem(THEME_KEY) || ''); } catch (e) {}
-    return THEMES.some(x => x.id === t) ? t : 'mist';
+    if (!THEMES.some(x => x.id === t)) return DEFAULT_THEME_ID;
+    let migrated = '';
+    try { migrated = String(localStorage.getItem(THEME_MIGRATED_KEY) || ''); } catch (e) {}
+    if (!migrated) {
+      try { localStorage.setItem(THEME_MIGRATED_KEY, '1'); } catch (e) {}
+      if (t === 'mist') {
+        try { localStorage.setItem(THEME_KEY, DEFAULT_THEME_ID); } catch (e) {}
+        return DEFAULT_THEME_ID;
+      }
+    }
+    return t;
+  }
+  // 应用整体是否为深色底（决定状态栏图标明暗、详情页是否走深色化）
+  function appThemeIsDark() {
+    const t = THEMES.find(x => x.id === currentTheme());
+    return !!(t && t.dark);
   }
   function applyTheme(id) {
     document.documentElement.setAttribute('data-theme', id);
-    // 状态栏图标明暗：深色主题（午夜蓝）用浅色图标
-    const isDark = id === 'midnight';
+    const meta = document.querySelector('meta[name="theme-color"]');
+    const dark = !!(THEMES.find(x => x.id === id) || {}).dark;
+    if (meta) meta.setAttribute('content', dark ? '#090B0F' : '#FFFFFF');
+    // 状态栏图标明暗：深色主题用浅色图标
     try {
       const b = bridge();
-      if (b && b.setStatusBarIcons) b.setStatusBarIcons(!isDark);
+      if (b && b.setStatusBarIcons) b.setStatusBarIcons(!dark);
     } catch (e) {}
   }
   function renderThemeGrid() {
@@ -4100,6 +4139,10 @@
       try { localStorage.setItem(THEME_KEY, id); } catch (e) {}
       applyTheme(id);
       renderThemeGrid();
+      // 详情页开着时立即按新主题重绘（深色化与否取决于新主题）
+      if ($('#detailPage') && $('#detailPage').classList.contains('open')) {
+        applyDetailTheme(rawDetailTheme);
+      }
     });
   }
   // 启动恢复 + 初始化渲染
