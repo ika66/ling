@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#FFFFFF">
+<title>铃</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="app">
+  <svg aria-hidden="true" width="0" height="0" style="position:absolute;overflow:hidden">
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.2"/><path d="m15.2 15.2 4.3 4.3"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3.5 7.5 4.2L12 11.9 4.5 7.7 12 3.5Z"/><path d="m4.5 12 7.5 4.2 7.5-4.2"/><path d="m4.5 16.3 7.5 4.2 7.5-4.2"/></symbol>
+    <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M6.5 4.5h11a1 1 0 0 1 1 1v14l-6.5-4-6.5 4v-14a1 1 0 0 1 1-1Z"/></symbol>
+    <symbol id="i-reading" viewBox="0 0 24 24"><path d="M3.5 5.5c2.8-1.1 5.7-1.1 8.5.2v14c-2.8-1.3-5.7-1.3-8.5-.2v-14Z"/><path d="M20.5 5.5c-2.8-1.1-5.7-1.1-8.5.2v14c2.8-1.3 5.7-1.3 8.5-.2v-14Z"/><path d="M6.8 9.2c1.2-.3 2.4-.3 3.6.1M6.8 12.6c1.2-.3 2.4-.3 3.6.1M13.6 9.3c1.2-.4 2.4-.4 3.6-.1M13.6 12.7c1.2-.4 2.4-.4 3.6-.1"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M5 4.5h9.3A2.7 2.7 0 0 1 17 7.2v12.3H7.7A2.7 2.7 0 0 1 5 16.8V4.5Z"/><path d="M7.7 19.5A2.7 2.7 0 0 1 5 16.8V4.5"/><path d="M8.5 8h5M8.5 11.2h5"/></symbol>
+    <symbol id="i-comic" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 11.5h7v8M10.5 11.5h10M13.8 4.5v7"/></symbol>
+    <symbol id="i-film" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2.4"/><path d="M8.2 5v14M15.8 5v14M3.5 9.5h4.7M15.8 9.5h4.7M3.5 14.5h4.7M15.8 14.5h4.7"/></symbol>
+    <symbol id="i-game" viewBox="0 0 24 24"><path d="M7.7 9h8.6a4.2 4.2 0 0 1 4 5.3l-.7 2.1a2.2 2.2 0 0 1-3.7.8L14.2 15H9.8L8.1 17.2a2.2 2.2 0 0 1-3.7-.8l-.7-2.1A4.2 4.2 0 0 1 7.7 9Z"/><path d="M7.3 11.8v2.4M6.1 13h2.4M16.7 12.4h.01M18.4 14h.01"/></symbol>
+    <symbol id="i-album" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2.2"/><path d="M12 3.5c2.4 1.9 3.4 5.1 3.1 8.5M12 20.5c-2.4-1.9-3.4-5.1-3.1-8.5"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5.5 12.5 4.2 4.2 8.8-9.4"/></symbol>
+    <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M4.5 12h15M13.5 6l6 6-6 6"/></symbol>
+    <symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="M12 19.5v-15M6 10.5l6-6 6 6"/></symbol>
+    <symbol id="i-pen" viewBox="0 0 24 24"><path d="m14.7 5.2 4.1 4.1M4.5 19.5l1-4.6L16.9 3.5a1.6 1.6 0 0 1 2.3 0l1.3 1.3a1.6 1.6 0 0 1 0 2.3L9.1 18.5l-4.6 1Z"/><path d="m13.8 6.1 4.1 4.1"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="4" y="5.5" width="16" height="14.5" rx="2.2"/><path d="M8 3.5v4M16 3.5v4M4 10h16"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6.5 6.5 11 11M17.5 6.5l-11 11"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="m14.5 5.5-6.5 6.5 6.5 6.5"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="18.5" cy="12" r="1"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 10.7v5M12 7.8h.01"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.2"/><circle cx="8.6" cy="9.4" r="1.5"/><path d="m5.4 17.2 4.6-4.6 3.3 3.3 2.4-2.4 3.9 3.9"/></symbol>
+    <symbol id="i-swipe" viewBox="0 0 24 24"><path d="M4.5 12h15M7.5 9 4.5 12l3 3M16.5 9l3 3-3 3"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9.5 7V4.5h5V7M7 7l1 12.5h8L17 7M10 10.5v6M14 10.5v6"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="M5 19h14M7 15.5l1-4L17.3 2.9a1.7 1.7 0 0 1 2.4 0l1.4 1.4a1.7 1.7 0 0 1 0 2.4L12 16l-5 1Z"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10-6.5-10-6.5Z"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3.5 13.7 9l5.5 1.7-5.5 1.7L12 18l-1.7-5.6L4.8 10.7 10.3 9 12 3.5Z"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 2.7 14.9 8.6l6.5.9-4.7 4.6 1.1 6.4L12 17.5l-5.8 3 1.1-6.4-4.7-4.6 6.5-.9L12 2.7Z"/></symbol>
+  </svg>
+
+  <main id="main">
+    <section class="screen active" id="screen-records">
+      <div class="screen-topbar">
+        <div class="brand-group">
+          <button class="icon-btn" data-action="open-drawer" aria-label="播放设置"><svg class="icon"><use href="#i-menu"/></svg></button>
+          <button class="brand" data-action="go-records" aria-label="回到记录">铃<span class="brand-dot"></span></button>
+        </div>
+        <div class="brand-actions">
+          <button class="icon-btn" data-action="open-search" aria-label="搜索"><svg class="icon"><use href="#i-search"/></svg></button>
+          <button class="icon-btn" data-action="open-daily" aria-label="每日推荐"><svg class="icon"><use href="#i-spark"/></svg></button>
+          <button class="add-btn" data-action="add-new" aria-label="添加作品"><svg class="icon"><use href="#i-plus"/></svg></button>
+        </div>
+      </div>
+      <div class="filter-row" id="recordFilters"></div>
+      <div id="nowCardWrap"></div>
+      <div class="section-head">
+        <h2 class="section-title">最近记录</h2>
+        <button class="text-link" id="recordsAllBtn">全部<svg class="icon"><use href="#i-arrow-right"/></svg></button>
+      </div>
+      <div class="record-list" id="recordList"></div>
+      <div id="recordsEmpty"></div>
+    </section>
+
+    <section class="screen" id="screen-wishlist">
+      <div class="screen-topbar">
+        <div class="brand-group">
+          <button class="icon-btn" data-action="open-drawer" aria-label="播放设置"><svg class="icon"><use href="#i-menu"/></svg></button>
+          <button class="brand" data-action="go-records" aria-label="回到记录">铃<span class="brand-dot"></span></button>
+        </div>
+        <div class="brand-actions">
+          <button class="icon-btn" data-action="open-search" aria-label="搜索"><svg class="icon"><use href="#i-search"/></svg></button>
+          <button class="add-btn" data-action="add-new" aria-label="添加作品"><svg class="icon"><use href="#i-plus"/></svg></button>
+        </div>
+      </div>
+      <div class="page-head">
+        <h1 class="screen-title">想看的</h1>
+        <p class="head-sub" id="wishStats"></p>
+      </div>
+      <div class="filter-row" id="wishFilters"></div>
+      <div id="wishGroups"></div>
+      <div id="wishEmpty"></div>
+    </section>
+
+    <section class="screen" id="screen-reading">
+      <div class="screen-topbar">
+        <div class="brand-group">
+          <button class="icon-btn" data-action="open-drawer" aria-label="播放设置"><svg class="icon"><use href="#i-menu"/></svg></button>
+          <button class="brand" data-action="go-records" aria-label="回到记录">铃<span class="brand-dot"></span></button>
+        </div>
+        <div class="brand-actions">
+          <button class="icon-btn" data-action="open-search" aria-label="搜索"><svg class="icon"><use href="#i-search"/></svg></button>
+          <button class="add-btn" data-action="add-new" aria-label="添加作品"><svg class="icon"><use href="#i-plus"/></svg></button>
+        </div>
+      </div>
+      <div class="page-head">
+        <h1 class="screen-title">在看</h1>
+        <p class="head-sub" id="readingStats"></p>
+      </div>
+      <div id="readerSwitcher"></div>
+      <div id="readingContent"></div>
+    </section>
+  </main>
+
+  <div class="bottom-glow"></div>
+  <nav class="glass-nav" aria-label="主导航">
+    <span class="nav-blob" id="navBlob" aria-hidden="true"></span>
+    <button class="nav-item active" data-tab="records"><svg class="icon"><use href="#i-layers"/></svg><span>记录</span></button>
+    <button class="nav-item" data-tab="wishlist"><svg class="icon"><use href="#i-bookmark"/></svg><span>想看</span></button>
+    <button class="nav-item" data-tab="reading"><svg class="icon"><use href="#i-reading"/></svg><span>在看</span></button>
+  </nav>
+
+  <!-- 添加 / 编辑作品 -->
+  <div class="page" id="addPage" aria-hidden="true">
+    <div class="overlay-head">
+      <button class="text-btn" id="cancelAdd"><svg class="icon"><use href="#i-close"/></svg>取消</button>
+      <span class="page-title" id="addPageTitle">新记录</span>
+      <span></span>
+    </div>
+    <div class="page-body">
+      <div class="segmented" id="statusSeg">
+        <span class="seg-blob" id="statusBlob"></span>
+        <button data-status="finished">已看完</button>
+        <button data-status="reading">在看</button>
+        <button data-status="wish">想看</button>
+      </div>
+
+      <div class="field">
+        <p class="field-label">类型</p>
+        <div class="type-grid" id="typeGrid">
+          <button class="type-option active" data-type="book"><svg class="icon"><use href="#i-book"/></svg><span>书</span></button>
+          <button class="type-option" data-type="comic"><svg class="icon"><use href="#i-comic"/></svg><span>漫画</span></button>
+          <button class="type-option" data-type="film"><svg class="icon"><use href="#i-film"/></svg><span>电影</span></button>
+          <button class="type-option" data-type="game"><svg class="icon"><use href="#i-game"/></svg><span>游戏</span></button>
+          <button class="type-option" data-type="album"><svg class="icon"><use href="#i-album"/></svg><span>专辑</span></button>
+        </div>
+      </div>
+
+      <div class="field">
+        <p class="field-label">作品图标</p>
+        <div class="icon-picker">
+          <span id="formIconPreview"></span>
+          <div class="icon-picker-actions">
+            <div class="mini-actions">
+              <button class="mini-btn" id="pickIcon"><svg class="icon"><use href="#i-image"/></svg>导入图标</button>
+              <button class="mini-btn" id="resetIcon">恢复默认</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <p class="field-label">作品名称</p>
+        <input class="input-title" id="formTitle" placeholder="写下一部作品" autocomplete="off">
+        <div class="ling-sug" id="lingSug" hidden></div>
+      </div>
+
+      <div class="field" id="creatorField" hidden>
+        <p class="field-label" id="creatorLabel">创作者</p>
+        <input class="input" id="formCreator" placeholder="" autocomplete="off">
+      </div>
+
+      <div id="finishedFields">
+        <div class="field">
+          <p class="field-label">打分</p>
+          <div class="rating-row">
+            <div class="rating-number"><svg class="score-star" aria-hidden="true"><use href="#i-star"/></svg><span id="formScore">8.5</span><small>/ 10</small></div>
+            <div class="rating-scale">
+              <input class="range" type="range" id="formRating" min="0" max="10" step="0.1" value="8.5" aria-label="十分制打分">
+              <div class="range-labels"><span>0</span><span>10</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <p class="field-label">记录时间</p>
+          <div class="date-row"><input type="date" id="formDate"></div>
+        </div>
+        <div class="field">
+          <p class="field-label">感想</p>
+          <textarea class="textarea" id="formThought" maxlength="2000" placeholder="写点什么…"></textarea>
+        </div>
+      </div>
+
+      <div id="readingFields" hidden>
+        <div class="field">
+          <p class="field-label">开始时间</p>
+          <div class="date-row"><input type="date" id="formStartedAt"></div>
+        </div>
+        <div class="field">
+          <p class="field-label">先记一笔</p>
+          <textarea class="textarea" id="formInitialNote" maxlength="1000" placeholder="此刻，想到什么？"></textarea>
+        </div>
+      </div>
+
+      <div id="wishFields" hidden>
+        <div class="field">
+          <p class="field-label">标签</p>
+          <div class="category-row" id="tagChips"></div>
+          <div class="tag-input-row">
+            <input class="input" id="formTag" list="tagOptions" placeholder="如：西部片" autocomplete="off">
+            <button class="ai-btn" id="aiTagBtn" type="button" aria-label="AI 智能标签"><svg class="icon"><use href="#i-spark"/></svg><span>AI</span></button>
+          </div>
+          <datalist id="tagOptions"></datalist>
+        </div>
+        <div class="field">
+          <p class="field-label">为什么想看</p>
+          <textarea class="textarea" id="formWhy" maxlength="1000" placeholder="是什么让你想打开它？"></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="page-footer">
+      <button class="primary-btn" id="saveWork"><span id="saveWorkLabel">保存记录</span><svg class="icon"><use href="#i-arrow-right"/></svg></button>
+    </div>
+  </div>
+
+  <!-- 作品详情 -->
+  <div class="page detail-page" id="detailPage" aria-hidden="true">
+    <div class="hero-top">
+      <button class="glass-round" id="closeDetail" aria-label="返回"><svg class="icon"><use href="#i-back"/></svg></button>
+      <div class="hero-tools">
+        <button class="glass-round" id="detailMore" aria-label="更多"><svg class="icon"><use href="#i-more"/></svg></button>
+      </div>
+    </div>
+    <div class="detail-scroll" id="detailScroll">
+      <div class="dt-stage" id="dtStage">
+        <div class="dt-hero" id="dtHero">
+          <div class="hero-track" id="heroTrack"></div>
+          <div class="dt-dots" id="heroDots"></div>
+        </div>
+        <div class="dt-head" id="detailHead"></div>
+        <div class="dt-rating" id="detailRating"></div>
+        <div class="dt-play-row" id="dtPlayRow" hidden>
+          <button class="dt-play" id="dtPlay" aria-label="播放这张专辑"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l10-6.5-10-6.5Z"/></svg></button>
+        </div>
+      </div>
+      <div class="dt-body" id="detailSheet"></div>
+    </div>
+  </div>
+
+  <!-- 搜索 -->
+  <div class="page" id="searchPage" aria-hidden="true">
+    <div class="search-top">
+      <div class="search-box">
+        <svg class="icon"><use href="#i-search"/></svg>
+        <input id="searchInput" type="search" placeholder="搜索" autocomplete="off">
+      </div>
+      <button class="search-cancel" id="closeSearch">取消</button>
+    </div>
+    <div class="search-body" id="searchResults"></div>
+  </div>
+
+  <!-- 随手记 / 编辑感想 -->
+  <div class="sheet-layer" id="noteSheet" aria-hidden="true">
+    <div class="sheet-backdrop" data-close="note"></div>
+    <div class="sheet">
+      <div class="sheet-grip"></div>
+      <div class="sheet-head">
+        <h2 id="sheetNoteTitle">记一笔</h2>
+        <button class="sheet-close" data-close="note" aria-label="关闭"><svg class="icon"><use href="#i-close"/></svg></button>
+      </div>
+      <div class="sheet-work" id="sheetWork"></div>
+      <textarea id="sheetNoteText" placeholder="此刻，想到什么？" maxlength="2000"></textarea>
+      <div class="preview-images sheet-images" id="sheetImagePreview"></div>
+      <div class="sheet-foot">
+        <div class="tag-row" id="sheetTags">
+          <button class="tag-btn" data-sheet-tag="摘抄">摘抄</button>
+          <button class="tag-btn" data-sheet-tag="想法">想法</button>
+        </div>
+        <div class="sheet-foot-tools">
+          <button class="attach-btn" data-action="add-sheet-images" aria-label="添加图片"><svg class="icon"><use href="#i-image"/></svg></button>
+          <button class="sheet-save" id="saveSheetNote">保存<svg class="icon"><use href="#i-arrow-up"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 操作菜单 -->
+  <div class="sheet-layer" id="actionSheet" aria-hidden="true">
+    <div class="sheet-backdrop" data-close="actions"></div>
+    <div class="sheet">
+      <div class="sheet-grip"></div>
+      <div id="actionContent" class="action-sheet"></div>
+    </div>
+  </div>
+
+  <!-- AI 结果面板（相似推荐 / 每日推荐） -->
+  <div class="sheet-layer" id="aiSheet" aria-hidden="true">
+    <div class="sheet-backdrop" data-close="ai"></div>
+    <div class="sheet ai-sheet">
+      <div class="sheet-grip"></div>
+      <div class="sheet-head">
+        <h2 id="aiSheetTitle">AI 推荐</h2>
+        <button class="sheet-close" data-close="ai" aria-label="关闭"><svg class="icon"><use href="#i-close"/></svg></button>
+      </div>
+      <div class="ai-sheet-body" id="aiSheetBody"></div>
+    </div>
+  </div>
+
+  <!-- 大图查看 -->
+  <div class="image-viewer" id="imageViewer" aria-hidden="true">
+    <button class="viewer-close" data-action="close-viewer" aria-label="关闭"><svg class="icon"><use href="#i-close"/></svg></button>
+    <button class="viewer-nav prev" data-action="viewer-prev" aria-label="上一张"><svg class="icon"><use href="#i-back"/></svg></button>
+    <img id="viewerImage" alt="">
+    <button class="viewer-nav next" data-action="viewer-next" aria-label="下一张"><svg class="icon"><use href="#i-arrow-right"/></svg></button>
+    <span class="viewer-count" id="viewerCount"></span>
+  </div>
+
+  <!-- 图片裁切：任意位置的矩形框选 -->
+  <div class="page crop-page" id="cropPage" aria-hidden="true">
+    <div class="overlay-head">
+      <button class="text-btn" id="cancelCrop"><svg class="icon"><use href="#i-close"/></svg>取消</button>
+      <span class="page-title" id="cropTitle">裁切图片</span>
+      <span></span>
+    </div>
+    <div class="crop-body">
+      <div class="crop-stage" id="cropStage">
+        <img id="cropImage" alt="">
+        <div class="crop-rect" id="cropRect">
+          <span class="crop-grid"></span>
+          <i class="crop-handle h-nw" data-h="nw"></i>
+          <i class="crop-handle h-ne" data-h="ne"></i>
+          <i class="crop-handle h-sw" data-h="sw"></i>
+          <i class="crop-handle h-se" data-h="se"></i>
+        </div>
+      </div>
+      <p class="crop-tip">拖动方框选择任意区域，拖四角调整大小，点空白处可重画</p>
+    </div>
+    <div class="page-footer">
+      <button class="primary-btn" id="useCrop">使用这张图<svg class="icon"><use href="#i-arrow-right"/></svg></button>
+    </div>
+  </div>
+
+  <!-- 新建菜单：以加号为中心 clip-path 圆形展开 -->
+  <div class="qa-layer" id="quickAdd" aria-hidden="true">
+    <div class="qa-inner">
+      <div class="qa-head">
+        <p class="qa-title">新建</p>
+        <p class="qa-sub">记一部作品，随时放下</p>
+      </div>
+      <div class="qa-list">
+        <button class="qa-item" data-qa="finished" style="--i:0">
+          <span class="qa-ico"><svg class="icon"><use href="#i-check"/></svg></span>
+          <span class="qa-txt"><b>已看完</b><small>打分，写下感想</small></span>
+        </button>
+        <button class="qa-item" data-qa="wish" style="--i:1">
+          <span class="qa-ico"><svg class="icon"><use href="#i-bookmark"/></svg></span>
+          <span class="qa-txt"><b>想看</b><small>先收进清单里</small></span>
+        </button>
+        <button class="qa-item" data-qa="reading" style="--i:2">
+          <span class="qa-ico"><svg class="icon"><use href="#i-reading"/></svg></span>
+          <span class="qa-txt"><b>在看</b><small>边看边记几笔</small></span>
+        </button>
+        <button class="qa-item" data-qa="search" style="--i:3">
+          <span class="qa-ico"><svg class="icon"><use href="#i-search"/></svg></span>
+          <span class="qa-txt"><b>搜索添加</b><small>从搜索里找作品</small></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <!-- 播放设置侧边栏 -->
+  <div class="drawer-layer" id="lingDrawer" aria-hidden="true">
+    <div class="drawer-backdrop" data-close="drawer"></div>
+    <aside class="drawer">
+      <div class="drawer-head">
+        <span class="drawer-title">播放设置</span>
+        <button class="sheet-close" data-close="drawer" aria-label="关闭"><svg class="icon"><use href="#i-close"/></svg></button>
+      </div>
+      <div class="drawer-body">
+        <p class="drawer-label">默认音乐播放源</p>
+        <div class="drawer-select" id="drawerDefSelect">
+          <span id="drawerDefLabel">不设默认</span>
+          <svg class="icon" id="drawerDefChevron"><use href="#i-back"/></svg>
+        </div>
+        <div class="drawer-pop" id="drawerDefPop" hidden>
+          <div id="drawerPlatforms"></div>
+          <button class="action-item" id="drawerNoDef"><i class="play-dot" style="background:#98A2B3"></i>不设默认，每次自己选<span class="play-state" id="drawerNoDefState"></span></button>
+        </div>
+        <p class="drawer-note">设为默认后，专辑详情页点播放键直接跳转；长按播放键任何时候都能打开平台面板。</p>
+
+        <p class="drawer-label">AI 助手</p>
+        <div class="drawer-select" id="aiModelSelect">
+          <span id="aiModelLabel">DeepSeek</span>
+          <svg class="icon" id="aiModelChevron"><use href="#i-back"/></svg>
+        </div>
+        <div class="drawer-pop" id="aiModelPop" hidden>
+          <div id="aiModelList"></div>
+        </div>
+        <input class="input ai-key-input" id="aiKeyInput" type="password" placeholder="填入所选模型的 API Key" autocomplete="off">
+        <p class="drawer-note">智能标签、相似作品推荐、每日推荐都会用到 AI。Key 仅保存在本机。</p>
+
+        <p class="drawer-label">外观与主题</p>
+        <div class="theme-grid" id="themeGrid"></div>
+        <p class="drawer-note">切换后全局生效，重启自动恢复。</p>
+      </div>
+    </aside>
+  </div>
+  <input type="file" id="iconFile" accept="image/*" hidden>
+  <input type="file" id="galleryFile" accept="image/*" multiple hidden>
+  <input type="file" id="commentImageFile" accept="image/*" multiple hidden>
+  <input type="file" id="backgroundFile" accept="image/*" hidden>
+  <input type="file" id="backupFile" accept=".json,application/json" hidden>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

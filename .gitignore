@@ -1,0 +1,41 @@
+# ── Gradle ───────────────────────────────────────────
+.gradle/
+build/
+.kotlin/
+# wrapper 的 jar 必须入库，否则 clone 后无法构建
+!gradle/wrapper/gradle-wrapper.jar
+
+# ── 本地环境（含 SDK 路径，因机器而异）────────────────
+local.properties
+
+# ── IDE ──────────────────────────────────────────────
+.idea/
+*.iml
+*.ipr
+*.iws
+captures/
+.externalNativeBuild/
+.cxx/
+
+# ── 构建产物 ─────────────────────────────────────────
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+output.json
+release/
+
+# ── 日志 ─────────────────────────────────────────────
+*.log
+
+# ── 签名与密钥：绝不入库 ──────────────────────────────
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+
+# ── 系统文件 ─────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini

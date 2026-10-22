@@ -1,0 +1,28 @@
+# 统一换行符，避免 Windows/Linux 之间产生整文件 diff
+* text=auto eol=lf
+
+# Gradle wrapper：脚本必须 LF，否则 Linux/macOS 上无法执行
+gradlew text eol=lf
+gradlew.bat text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# 二进制文件不做换行转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.jar binary
+*.apk binary
+*.aab binary
+*.jks binary
+*.keystore binary
+
+# 语言与文档
+*.kt text
+*.kts text
+*.xml text
+*.html text
+*.css text
+*.js text
+*.md text
